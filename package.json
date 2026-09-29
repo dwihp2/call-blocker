@@ -1,0 +1,19 @@
+{
+  "name": "call-blocker",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "modules/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "fixtures:jvm": "cd apps/mobile/android && ./gradlew :call-screening:testDebugUnitTest",
+    "app": "npm --workspace apps/mobile run start"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}

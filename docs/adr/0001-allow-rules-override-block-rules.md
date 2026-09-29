@@ -1,0 +1,3 @@
+# Allow rules override Block rules, whatever the size of either pattern
+
+A number can match several Rules at once (a Block prefix and an Allow single number, or an Allow prefix and a Block single number). We decided the Allow list always wins, regardless of how specific either pattern is, because Contacts allowance has no pattern size to rank against and any specificity ranking produces decisions the person cannot predict. The exception: a Single number Block rule beats Contacts allowance, so a person can still block someone who is in their contacts. The cost is that a wide Allow prefix can shadow a narrow Block rule, which is why Registration warns about Overlaps.

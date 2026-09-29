@@ -1,0 +1,30 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.callblocker.callscreening'
+version = '0.1.0'
+
+android {
+  namespace "com.callblocker.callscreening"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Canonical numbers: the Default region turns a typed number into E.164.
+  implementation 'com.googlecode.libphonenumber:libphonenumber:8.13.55'
+  testImplementation 'junit:junit:4.13.2'
+  // The fixture table is JSON, and Android's own org.json is a stub in unit tests.
+  testImplementation 'org.json:json:20240303'
+}
+
+tasks.withType(Test).configureEach {
+  systemProperty 'fixtures.path', System.getenv('CALL_BLOCKER_FIXTURES') ?: file("${project.projectDir}/../../../fixtures/matching.json").absolutePath
+}

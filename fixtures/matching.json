@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "description": "The matching contract, run by the Kotlin unit tests and the Swift XCTest suite. Precedence, highest first: (1) Blocking off decides 'off' and no Rule is consulted. (2) A matching Allow rule decides 'rule' and allows the call, whatever size the Block rule it overrides is. (3) A matching Single number Block rule decides 'rule' and blocks the call, beating Contacts allowance. (4) Contacts allowance on, and the number in contacts, decides 'contacts' and allows the call, beating Prefix and Interval Block rules. (5) Any other matching Block rule decides 'rule' and blocks the call. (6) Otherwise 'none', allowed. When several Block rules match, the most specific reports: Single number first, then the first Prefix or Interval in input order. When several Allow rules match, the first in input order reports.",
+  "cases": [
+    {
+      "name": "no rules leaves the call alone",
+      "rules": [],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    },
+    {
+      "name": "blocking off ignores a matching block rule",
+      "blocking": false,
+      "rules": [{ "kind": "block", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "off" } }
+    },
+    {
+      "name": "blocking off ignores a matching allow rule",
+      "blocking": false,
+      "rules": [{ "kind": "allow", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "off" } }
+    },
+    {
+      "name": "a single number block rule blocks exactly that number",
+      "rules": [{ "kind": "block", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "a single number block rule does not block a longer number",
+      "rules": [{ "kind": "block", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+62812345678901",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    },
+    {
+      "name": "a prefix blocks every number that begins with it",
+      "rules": [{ "kind": "block", "pattern": "prefix", "number": "+62812" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "a prefix does not block a shorter number",
+      "rules": [{ "kind": "block", "pattern": "prefix", "number": "+62812" }],
+      "query": "+6281",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    },
+    {
+      "name": "an interval includes its start",
+      "rules": [
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234560000",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "an interval includes its end",
+      "rules": [
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234569999",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "an interval excludes the number before its start",
+      "rules": [
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234559999",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    },
+    {
+      "name": "an interval excludes the number after its end",
+      "rules": [
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234570000",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    },
+    {
+      "name": "an allow single number beats a block prefix",
+      "rules": [
+        { "kind": "block", "pattern": "prefix", "number": "+62812" },
+        { "kind": "allow", "pattern": "single", "number": "+6281234567890" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "an allow prefix beats a block single number",
+      "rules": [
+        { "kind": "block", "pattern": "single", "number": "+6281234567890" },
+        { "kind": "allow", "pattern": "prefix", "number": "+62812" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "an allow single number beats a block single number",
+      "rules": [
+        { "kind": "block", "pattern": "single", "number": "+6281234567890" },
+        { "kind": "allow", "pattern": "single", "number": "+6281234567890" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "an allow interval beats a block prefix",
+      "rules": [
+        { "kind": "block", "pattern": "prefix", "number": "+62812" },
+        { "kind": "allow", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234565000",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "the first matching allow rule reports",
+      "rules": [
+        { "kind": "allow", "pattern": "prefix", "number": "+628" },
+        { "kind": "allow", "pattern": "prefix", "number": "+62812" },
+        { "kind": "block", "pattern": "prefix", "number": "+6281234" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "an allow rule with no block rule still reports",
+      "rules": [{ "kind": "allow", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "contacts allowance beats a block prefix",
+      "contactsAllowance": true,
+      "contacts": ["+6281234567890"],
+      "rules": [{ "kind": "block", "pattern": "prefix", "number": "+62812" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "contacts" } }
+    },
+    {
+      "name": "contacts allowance beats a block interval",
+      "contactsAllowance": true,
+      "contacts": ["+6281234567890"],
+      "rules": [
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "contacts" } }
+    },
+    {
+      "name": "a single number block rule beats contacts allowance",
+      "contactsAllowance": true,
+      "contacts": ["+6281234567890"],
+      "rules": [{ "kind": "block", "pattern": "single", "number": "+6281234567890" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "an allow rule beats a single number block rule that would beat contacts",
+      "contactsAllowance": true,
+      "contacts": ["+6281234567890"],
+      "rules": [
+        { "kind": "block", "pattern": "single", "number": "+6281234567890" },
+        { "kind": "allow", "pattern": "prefix", "number": "+62812" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "contacts allowance off leaves a contact blocked by a prefix",
+      "contactsAllowance": false,
+      "contacts": ["+6281234567890"],
+      "rules": [{ "kind": "block", "pattern": "prefix", "number": "+62812" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "the most specific block rule reports when two match",
+      "rules": [
+        { "kind": "block", "pattern": "prefix", "number": "+62812" },
+        { "kind": "block", "pattern": "single", "number": "+6281234567890" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 1 } }
+    },
+    {
+      "name": "the first of two matching block rules reports when neither is a single number",
+      "rules": [
+        { "kind": "block", "pattern": "prefix", "number": "+62812" },
+        { "kind": "block", "pattern": "interval", "number": "+6281234560000", "end": "+6281234569999" }
+      ],
+      "query": "+6281234567890",
+      "expect": { "blocked": true, "decidedBy": { "type": "rule", "index": 0 } }
+    },
+    {
+      "name": "a prefix from another country does not match",
+      "rules": [{ "kind": "block", "pattern": "prefix", "number": "+659" }],
+      "query": "+6281234567890",
+      "expect": { "blocked": false, "decidedBy": { "type": "none" } }
+    }
+  ]
+}

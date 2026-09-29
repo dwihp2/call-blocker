@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The Contacts allowance reads the device's contacts live while screening. -->
+  <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+  <application>
+    <!--
+      The piece Android hands every incoming call to. Only the system may bind it,
+      hence BIND_SCREENING_SERVICE; the action is what makes it the selected
+      call screening service.
+    -->
+    <service
+      android:name=".CallBlockerScreeningService"
+      android:exported="true"
+      android:permission="android.permission.BIND_SCREENING_SERVICE">
+      <intent-filter>
+        <action android:name="android.telecom.CallScreeningService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

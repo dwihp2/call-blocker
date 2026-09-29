@@ -1,0 +1,3 @@
+# iOS refuses changes that exceed Capacity instead of trimming them
+
+The iPhone's blocking list has a practical ceiling that nobody documents, so the app sets its own Capacity of 1,000,000 entries and refuses any change that would cross it: a Registration is rejected with the reason and nothing is saved, while a Bulk import or Restore applies what fits and reports the rejected rules with their reasons. The obvious alternative — accept everything and drop whatever doesn't fit — was rejected because a Rule that looks saved but never fires is the exact failure this app exists to prevent. Registration, which is one deliberate act on one Rule, gets a hard refusal; the two bulk paths stay usable by reporting instead of failing whole.
