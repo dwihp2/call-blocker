@@ -67,6 +67,20 @@ public class CallDirectoryModule: Module {
       }
 
       CXCallDirectoryManager.sharedInstance.reloadExtension(withIdentifier: self.extensionBundleIdentifier) { error in
+        if let error, Self.isDisabledProblem(error) {
+          // The numbers are in the store; the extension simply is not switched
+          // on yet, which is the state of every fresh install and what
+          // Protection status explains. Rejecting here would make Registration
+          // fail on a device that has not been set up yet.
+          promise.resolve(SyncResultRecord(
+            written: true,
+            entries: numbers.count,
+            capacity: callDirectoryCapacity,
+            overflow: false,
+            rejected: []
+          ))
+          return
+        }
         guard let error else {
           promise.resolve(SyncResultRecord(
             written: true,
@@ -176,7 +190,7 @@ public class CallDirectoryModule: Module {
   private func statusDetail(pieceOn: Bool, error: Error?) -> String {
     let howToTurnOn = "Turn Call Blocker on in Settings › Phone › Call Blocking & Identification."
     if let meta = store.readMeta() {
-      let written = "\(meta.entries) numbers blocked, last written \(Self.readable(meta.generatedAt))."
+      let written = "\(Self.grouped(meta.entries)) numbers blocked, last written \(Self.readable(meta.generatedAt))."
       return pieceOn ? written : "\(written) \(howToTurnOn)"
     }
     // CallKit reports an error while the extension has never been turned on,
@@ -191,6 +205,34 @@ public class CallDirectoryModule: Module {
   /** CallKit answers `unknown` with this error while the extension has never been enabled. */
   private static func isCallDirectoryManagerError(_ error: Error) -> Bool {
     return (error as NSError).domain == "com.apple.CallKit.error.calldirectorymanager"
+  }
+
+  /**
+   Whether the reload failed only because the extension is not switched on. Every
+   fresh install starts here, and the numbers are written either way, so this is
+   not a failure the person has to act on beyond turning the extension on.
+   */
+  private static func isDisabledProblem(_ error: Error) -> Bool {
+    return isCallDirectoryManagerError(error)
+  }
+
+  /**
+   Counts read as numbers: 112112 becomes 112,112. Grouping is fixed rather than
+   locale-driven because the app's own formatting is fixed, so the same count
+   reads the same wherever the app runs.
+   */
+  private static let countFormatter: NumberFormatter = {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.usesGroupingSeparator = true
+    formatter.groupingSeparator = ","
+    formatter.groupingSize = 3
+    return formatter
+  }()
+
+  private static func grouped(_ value: Int) -> String {
+    return countFormatter.string(from: NSNumber(value: value)) ?? String(value)
   }
 
   /** The store keeps an ISO 8601 stamp; the person reads a date. */
