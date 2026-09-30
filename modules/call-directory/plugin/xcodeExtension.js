@@ -219,6 +219,13 @@ function applyExtensionBuildSettings(project, targetUuid, options) {
     settings.SWIFT_VERSION = '5.0';
     settings.TARGETED_DEVICE_FAMILY = '1';
     settings.IPHONEOS_DEPLOYMENT_TARGET = options.deploymentTarget;
+    // The extension is a target of its own, so it does not inherit the app's
+    // signing settings: without the team and automatic style, a device build
+    // fails to provision the extension.
+    settings.CODE_SIGN_STYLE = 'Automatic';
+    if (options.appleTeamId) {
+      settings.DEVELOPMENT_TEAM = options.appleTeamId;
+    }
   }
 }
 

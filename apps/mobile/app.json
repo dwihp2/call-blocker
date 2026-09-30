@@ -9,11 +9,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.callblocker.app",
+      "bundleIdentifier": "com.dwihp2.call-blocker",
+      "appleTeamId": "6NN3PT736K",
       "supportsTablet": false
     },
     "android": {
-      "package": "com.callblocker.app",
+      "package": "com.dwihp2.callblocker",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -50,9 +51,8 @@
       [
         "call-directory",
         {
-          "appGroup": "group.com.callblocker.app",
-          "extensionName": "CallDirectoryExtension",
-          "extensionBundleId": "com.callblocker.app.CallDirectoryExtension"
+          "appGroup": "group.com.dwihp2.call-blocker",
+          "extensionName": "CallDirectoryExtension"
         }
       ]
     ],

@@ -55,6 +55,7 @@ function resolveOptions(config, props) {
     displayName: config.name ?? extensionName,
     version: config.version ?? '1.0.0',
     buildNumber: config.ios?.buildNumber ?? '1',
+    appleTeamId: config.ios?.appleTeamId,
   };
 }
 

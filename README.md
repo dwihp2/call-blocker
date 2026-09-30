@@ -30,6 +30,13 @@ npx expo prebuild --clean        # regenerates ios/ and android/ including the e
 npx expo run:ios                 # or: npx expo run:android
 ```
 
+Every Expo command runs in `apps/mobile`, never at the repo root: the root is a
+workspace manifest, and running `expo run:ios` there builds a stub app with no
+JavaScript entry and no scene lifecycle, which UIKit kills at launch on iOS 27
+(`EXC_BREAKPOINT`, `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`).
+For a build that runs without Metro, use `npx expo run:ios --configuration Release`,
+or open `apps/mobile/ios/CallBlocker.xcworkspace` in Xcode.
+
 `npx expo prebuild --clean` is the supported path: both native pieces are produced by config plugins and the module manifests, so the generated `ios/` and `android/` directories are disposable.
 
 After the first build, start Metro with `npm run app` and reload the dev client.
