@@ -121,7 +121,7 @@ Practical reading: the ceiling is per-extension and undocumented, in the million
 | **Call Directory extension, blocking entries** | Yes | An app extension, an App Group to share the list between app and extension, platform's Settings switch | Undocumented per-extension entry cap; silent failure modes above; the corruption bug |
 
 | **Call Directory extension, identification entries** | No (labels only) | Same | Shares the extension's entry list, so it competes with blocking entries for whatever the cap is (inference from the API shape: both kinds live in the same `CallDirectory.db`); a forum report puts 1,000,000 identification entries at ~100 s to load ([thread 694514](https://developer.apple.com/forums/thread/694514)) |
-| **Live Caller ID Lookup** (iOS 18+) | **Yes** — the blocking response is one byte, `0` don't block / `1` block, fetched per call from the app's server | A PIR server, a Privacy Pass token issuer, Apple relay servers, **endpoint validation by Apple** ("submit your request"), registration in the CloudKit Console Identity & Trust page | Removes the local entry cap entirely; needs infrastructure and network at call time; cached per number, so a wrong answer can persist for the cache window |
+| **Live Caller ID Lookup** (iOS 18+) | **Yes** — the blocking response is one byte, `0` don't block / `1` block, fetched per call from the app's server | A PIR server, a Privacy Pass token issuer, Apple relay servers, **endpoint validation by Apple** ("submit your request"), registration in the CloudKit Console Identity & Trust page | Removes the local entry cap entirely (§5b confirms nothing newer replaces it); needs infrastructure and network at call time; cached per number. Apple's own server backend is an **example, not a product**: "While functional, this is just an example service and should not be run in production", and building it takes Swift 6.1+ on macOS or Linux ([pir-service-example](https://github.com/apple/pir-service-example)) |
 | **Focus / Silence Unknown Callers** | Yes, but user-controlled | Nothing | Not drivable by an app; no per-number logic |
 | **Carrier-level blocking** | Yes | Carrier contract | Outside the app's control |
 
@@ -130,6 +130,21 @@ Practical reading: the ceiling is per-extension and undocumented, in the million
 Sources: [Live Caller ID Lookup overview](https://developer.apple.com/documentation/identitylookup), [Getting up-to-date calling and blocking information for your app](https://developer.apple.com/documentation/identitylookup/getting-up-to-date-calling-and-blocking-information-for-your-app) ("The app extension tells the system how to communicate with your server … This requires endpoint validation from Apple"), [Formatting data for blocking and identity information](https://developer.apple.com/documentation/identitylookup/formatting-data-for-blocking-and-identity-information) (blocking = `0`/`1`; identity = a `CallIdentity` protobuf), [Understanding how Live Caller ID Lookup preserves privacy](https://developer.apple.com/documentation/identitylookup/understanding-how-live-caller-id-lookup-preserves-privacy).
 
 **Verdict: there is no local alternative.** For a two-person project with no server, the Call Directory extension is the mechanism, and the engineering question is how to keep the list small and the load observable. Live Caller ID Lookup is the only design that scales to arbitrary lists, and it is a different project — a hosted service plus an Apple approval.
+
+## 5b. iOS 26 and 27 changed nothing here
+
+Checked because the test device runs iOS 27:
+
+- Apple's official changelog for the framework lists exactly one recent change, a call-translation action added June 2025: "Configure a call to include an option to use the system's translation capabilities with a CXSetTranslatingCallAction." **No Call Directory changes.** ([CallKit updates](https://developer.apple.com/documentation/updates/callkit))
+- The forum announcement of iOS 26 CallKit changes covers new diagnostic dialogs for VoIP push problems, and nothing about the Call Directory. ([CallKit tag](https://developer.apple.com/forums/tags/callkit))
+
+So on iOS 27 the mechanism, the error codes, the undocumented entry cap, and the corruption bug are all as described above.
+
+What iOS 26 *did* add is a system feature that competes with a blocking app rather than serving it — **Call Screening**, documented in the iPhone User Guide for iOS 27:
+
+> "Call Screening automatically answers calls from unknown numbers without interrupting you. After the caller shares their name and reason for their call, your iPhone rings and shares their response so you can decide if you want to pick up. You can also choose to silence calls from unknown callers and send them directly to voicemail." ([Screen and block calls on iPhone](https://support.apple.com/guide/iphone/screen-and-block-calls-iphe4b3f7823/ios))
+
+The same page documents *Unknown Callers* ("Calls from unknown numbers are removed from your Recents list and sent to the Unknown Callers list"), *Spam* filtering, and per-contact blocking. None of it is drivable by an app — there is no API for any of these settings — but together they cover much of what a person installs a blocker for, which is worth weighing before investing further in this app.
 
 ## 6. What this means for Call Blocker
 
