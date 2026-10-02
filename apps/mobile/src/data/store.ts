@@ -248,10 +248,15 @@ async function persist(state: LocalAppState): Promise<void> {
   try {
     const directory = new Directory(Paths.document, STATE_DIRECTORY);
     if (!directory.exists) directory.create({ intermediates: true, idempotent: true });
-    const temporary = new File(directory, `${STATE_FILE}.tmp`);
-    temporary.write(serialize(state));
-    // A move is atomic on both platforms: either the old file or the new one is there.
-    await temporary.move(new File(directory, STATE_FILE), { overwrite: true });
+    // One write, straight at the file. The temp-file-and-move this used to do
+    // deleted the destination before moving the temp over it, so any failure
+    // between the two steps destroyed the saved state instead of leaving the
+    // previous one in place.
+    const file = new File(directory, STATE_FILE);
+    file.write(serialize(state));
+    if (!file.exists || file.size === 0) {
+      throw new Error('the file was written but is empty');
+    }
     if (snapshot.error !== null) publish({ ...snapshot, error: null });
   } catch (reason) {
     publish({ ...snapshot, error: `The state could not be saved (${describeError(reason)}).` });
