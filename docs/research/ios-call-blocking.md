@@ -58,7 +58,8 @@ This is the single most important sentence in the whole API for us: a load that 
 3. **The request expired** → every entry discarded, no error anywhere (see §2).
 4. **Too many entries** → `maximumEntriesExceeded` (5).
 5. **Out of order or duplicated entries** → codes 3 and 4, again discarding the request.
-6. **The device's Call Directory database is corrupt** → the state our device is most likely in.
+6. **Frequent reloads are interrupted** → `loadingInterrupted` (2). A developer whose app "frequently keep[s] updating the list of blocked numbers in the Call Directory Extension" reported this error appearing "frequently … from iOS 15 onwards", with no answer from Apple in 2021 and another developer confirming the same in 2024. ([thread 693747](https://developer.apple.com/forums/thread/693747))
+7. **The device's Call Directory database is corrupt** → see below.
 
 ### The database corruption bug (FB20986470)
 
@@ -153,6 +154,21 @@ The same page documents *Unknown Callers* ("Calls from unknown numbers are remov
 3. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success. Then restructure `beginRequest` to match the working implementations in §3c: add synchronously, complete at the end, and send deltas when the request is incremental.
 4. **Surface the reload error verbatim** (`reloadError`), and translate the documented codes (3, 4, 5, 6, 102) into sentences a person can act on. Partly done.
 5. **Fix the build trap before trusting any instrumentation** (§3b): the plugin must reference the module's extension sources rather than copying them at prebuild, and it must fix the delegate method name, or the extension source does not even compile.
+
+## 6b. Hypotheses, and the smallest test for each
+
+Ordered by what to do first, cheapest first. Until a *correctly prebuilt* build is on the device (§3b), every observation about the extension is untrustworthy — so everything below assumes that build.
+
+| Hypothesis | Smallest test | If confirmed |
+|---|---|---|
+| **Build artefact**: the extension on the device is not the code in the repo | Deploy after `expo prebuild`; note whether a load report appears at all | The mechanism works; earlier "never loaded" conclusions were void and get re-measured |
+| **The list is too big / the load expires** (`expired = true`) | Cut the Rules to a handful of single numbers, reload, call the number | Cap iOS expansion low; restructure `beginRequest` to add synchronously and complete at the end |
+| **Frequent reloads are interrupted** (`loadingInterrupted`, 2) | Count the reloads a session performs; batch writes so one reload covers a whole edit | Rewrite the sync policy: one reload per session, not one per change |
+| **The extension is not actually registered** (`noExtensionFound`, 1; `extensionDisabled`, 6; undocumented 102) | Read the error text from `sync`; toggle the extension off/on | Reinstall + re-enable, or rebuild the registration |
+| **Device-level database corruption** (`com.apple.callkit.database.sqlite Code=11`) | Test whether *another* call-blocking app still blocks a call today | Nothing an app can do: *Reset All Settings*, or wait for Apple's fix |
+| **CallKit accepts the list and still allows the call** | Number check inside the app, then a real call from that exact number | Compare the Canonical number against what the carrier delivers |
+
+Every test above is one action for the person holding the phone, and each result eliminates whole branches of this document rather than narrowing a single one.
 
 ## 7. What we still do not know
 
