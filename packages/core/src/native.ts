@@ -25,6 +25,12 @@ export interface SyncResult {
   overflow: boolean;
   /** Rules that could not fit, as indices into the input's rules. */
   rejected: number[];
+  /**
+   * Set when the list was written but CallKit refused to reload it. The numbers
+   * are on disk and will not be in force until the extension loads, so the app
+   * must say so rather than report success.
+   */
+  reloadError?: string;
 }
 
 /** The shape both native engines expose to the app. */

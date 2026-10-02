@@ -50,6 +50,13 @@ function syncNotice(result: SyncResult): Notice {
       message: 'The platform wrote no numbers, so the blocking list already matches the Rules.',
     };
   }
+  if (result.reloadError) {
+    return {
+      tone: 'warning',
+      title: 'Written, but CallKit would not reload it',
+      message: `The numbers are saved and nothing is being blocked yet. CallKit said: ${result.reloadError}`,
+    };
+  }
   return {
     tone: 'success',
     title: 'Sync complete',

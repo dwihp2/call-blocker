@@ -67,31 +67,17 @@ public class CallDirectoryModule: Module {
       }
 
       CXCallDirectoryManager.sharedInstance.reloadExtension(withIdentifier: self.extensionBundleIdentifier) { error in
-        if let error, Self.isDisabledProblem(error) {
-          // The numbers are in the store; the extension simply is not switched
-          // on yet, which is the state of every fresh install and what
-          // Protection status explains. Rejecting here would make Registration
-          // fail on a device that has not been set up yet.
-          promise.resolve(SyncResultRecord(
-            written: true,
-            entries: numbers.count,
-            capacity: callDirectoryCapacity,
-            overflow: false,
-            rejected: []
-          ))
-          return
-        }
-        guard let error else {
-          promise.resolve(SyncResultRecord(
-            written: true,
-            entries: numbers.count,
-            capacity: callDirectoryCapacity,
-            overflow: false,
-            rejected: []
-          ))
-          return
-        }
-        promise.reject("ERR_CALL_DIRECTORY_RELOAD", "The Call Directory extension refused the reload: \(error.localizedDescription)")
+        // The numbers are in the store either way, so nothing here fails: the
+        // reload's own outcome is reported instead. Keeping it quiet was how the
+        // app came to say "saved" while CallKit had refused to load anything.
+        promise.resolve(SyncResultRecord(
+          written: true,
+          entries: numbers.count,
+          capacity: callDirectoryCapacity,
+          overflow: false,
+          rejected: [],
+          reloadError: error?.localizedDescription
+        ))
       }
     }
 
@@ -232,15 +218,6 @@ public class CallDirectoryModule: Module {
   }
 
   /**
-   Whether the reload failed only because the extension is not switched on. Every
-   fresh install starts here, and the numbers are written either way, so this is
-   not a failure the person has to act on beyond turning the extension on.
-   */
-  private static func isDisabledProblem(_ error: Error) -> Bool {
-    return isCallDirectoryManagerError(error)
-  }
-
-  /**
    Counts read as numbers: 112112 becomes 112,112. Grouping is fixed rather than
    locale-driven because the app's own formatting is fixed, so the same count
    reads the same wherever the app runs.
@@ -346,6 +323,7 @@ struct SyncResultRecord: Record {
   @Field var capacity: Int = callDirectoryCapacity
   @Field var overflow: Bool = false
   @Field var rejected: [Int] = []
+  @Field var reloadError: String? = nil
 }
 
 struct DecisionSourceRecord: Record {
