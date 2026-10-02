@@ -120,7 +120,7 @@ Practical reading: the ceiling is per-extension and undocumented, in the million
 |---|---|---|---|
 | **Call Directory extension, blocking entries** | Yes | An app extension, an App Group to share the list between app and extension, platform's Settings switch | Undocumented per-extension entry cap; silent failure modes above; the corruption bug |
 
-| **Call Directory extension, identification entries** | No (labels only) | Same | Shares the same list budget; slower with unique labels |
+| **Call Directory extension, identification entries** | No (labels only) | Same | Shares the extension's entry list, so it competes with blocking entries for whatever the cap is (inference from the API shape: both kinds live in the same `CallDirectory.db`); a forum report puts 1,000,000 identification entries at ~100 s to load ([thread 694514](https://developer.apple.com/forums/thread/694514)) |
 | **Live Caller ID Lookup** (iOS 18+) | **Yes** — the blocking response is one byte, `0` don't block / `1` block, fetched per call from the app's server | A PIR server, a Privacy Pass token issuer, Apple relay servers, **endpoint validation by Apple** ("submit your request"), registration in the CloudKit Console Identity & Trust page | Removes the local entry cap entirely; needs infrastructure and network at call time; cached per number, so a wrong answer can persist for the cache window |
 | **Focus / Silence Unknown Callers** | Yes, but user-controlled | Nothing | Not drivable by an app; no per-number logic |
 | **Carrier-level blocking** | Yes | Carrier contract | Outside the app's control |
