@@ -72,7 +72,14 @@ Apple's response, from Kevin Elliott (DTS Engineer, CoreOS/Hardware), in the sam
 
 > "there's a database that's used to collect all call directory entries, and that database has become corrupt and cannot be opened. **How/why it's becoming corrupt is unknown**, as the engineering team has never been able to identify any specific cause. There were significant reports of this happening several years ago, and those were addressed by the addition of several different data recovery mechanisms. That's also why the file wasn't simply deleted and the entire directory system 'reset' … At this point, the issue is under active investigation, but I can't comment on if/when a fix might ship."
 
-Two weeks before this research, the same engineer answered a request for an update: "Unfortunately, I don't have anything more I can share. **They're still working on a fix, but nothing has been released.**" Other developers in the thread add: "I have the same issue with my app", "I have a lot of users that are still having this exact issue, and nothing is helping (reinstalling the app, disabling/re-enabling callkit permissions, deleting the app, resetting the callkit numbers)", and a report that it persists on iOS 26.2.
+Two weeks before this research, the same engineer answered a request for an update: "Unfortunately, I don't have anything more I can share. **They're still working on a fix, but nothing has been released.**"
+
+A second report of the same corruption shows *which statement fails*, and it is a deletion:
+
+> `errorCode: 11`, `errorDomain: com.apple.callkit.database.sqlite`, "sqlite3_step for query **'DELETE FROM PhoneNumberBlockingEntry WHERE extension_id =?'** returned 11 (11)", "database disk image is malformed"
+> — [thread 806129](https://developer.apple.com/forums/thread/806129) (Apple DTS replied asking for the bug number; the reporter confirmed it is the same issue)
+
+That matters for us specifically: `removeAllBlockingEntries()` issues exactly that delete for every entry the extension has stored, and our extension calls it on **every** incremental reload before re-adding the whole 111,112-entry list. Other developers in the thread add: "I have the same issue with my app", "I have a lot of users that are still having this exact issue, and nothing is helping (reinstalling the app, disabling/re-enabling callkit permissions, deleting the app, resetting the callkit numbers)", and a report that it persists on iOS 26.2.
 
 **Why this fits our evidence:** extension enabled, reload requested many times, extension never once launched (no load report), no crash log, and none of the usual remedies (re-enable, reboot, reinstall) changed anything. The one prediction it makes that we have not yet tested: **the other call-blocking apps on the same phone should also be failing.** The reporter tested exactly that and found they all fail.
 
@@ -150,10 +157,11 @@ The same page documents *Unknown Callers* ("Calls from unknown numbers are remov
 ## 6. What this means for Call Blocker
 
 1. **Test whether the phone itself is broken** before changing more code: ask the user whether any *other* call-blocking app on that device blocks a call today. All of them failing means device-level CallKit corruption, which no app can fix — only *Reset All Settings*, or waiting for Apple.
-2. **Stop expanding prefixes into six-figure entry counts.** Every reload inserts the whole list again, which is both slow (~100 s per million) and the churn pattern associated with the corruption reports. Cap the expansion far below 1,000,000 and say so at Registration.
-3. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success. Then restructure `beginRequest` to match the working implementations in §3c: add synchronously, complete at the end, and send deltas when the request is incremental.
-4. **Surface the reload error verbatim** (`reloadError`), and translate the documented codes (3, 4, 5, 6, 102) into sentences a person can act on. Partly done.
-5. **Fix the build trap before trusting any instrumentation** (§3b): the plugin must reference the module's extension sources rather than copying them at prebuild, and it must fix the delegate method name, or the extension source does not even compile.
+2. **Never call `removeAllBlockingEntries()` as a shortcut.** The failure that is on record is a `DELETE FROM PhoneNumberBlockingEntry`; removing and re-inserting the whole list on every reload is the maximum exposure to it. Send the delta — remove only the numbers that went away, add only the ones that arrived, as CallKitty does (§3c) — or keep the list small enough that a reload has almost nothing to change.
+3. **Stop expanding prefixes into six-figure entry counts.** Every reload inserts the whole list again, which is both slow (~100 s per million) and the churn pattern associated with the corruption reports. Cap the expansion far below 1,000,000 and say so at Registration.
+4. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success. Then restructure `beginRequest` to match the working implementations in §3c: add synchronously, complete at the end, and send deltas when the request is incremental.
+5. **Surface the reload error verbatim** (`reloadError`), and translate the documented codes (3, 4, 5, 6, 102) into sentences a person can act on. Partly done.
+6. **Fix the build trap before trusting any instrumentation** (§3b): the plugin must reference the module's extension sources rather than copying them at prebuild, and it must fix the delegate method name, or the extension source does not even compile.
 
 ## 6b. Hypotheses, and the smallest test for each
 
@@ -176,4 +184,4 @@ Every test above is one action for the person holding the phone, and each result
 - **Whether the CallKit database on our test device is corrupt** — the other-apps test above settles it.
 - **The system's time budget for `beginRequest`.** Documented nowhere; the `expired` flag is the only way to observe it, which our extension now records.
 - **Whether our chunked, asynchronous adding (10,000 entries per queue hop) makes expiration more likely** than adding synchronously inside `beginRequest`. Worth measuring on a healthy device.
-- **Whether re-adding the entire list on every incremental request is itself a corruption trigger.** The corruption cause is officially unknown; our reload-everything pattern is at least the highest-churn option available.
+- **Whether re-adding the entire list on every incremental request is itself a corruption trigger.** The officially unknown cause has a known *symptom* — a failing `DELETE FROM PhoneNumberBlockingEntry` — and our reload-everything pattern maximises the number of those statements. Whether the delete is the trigger or the first casualty is not established.
