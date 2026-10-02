@@ -56,6 +56,21 @@ The two native engines are separate implementations of one contract, so `fixture
 ## Platform notes
 
 - iOS blocking only works while the extension is enabled in Settings > Phone > Call Blocking & Identification, which the app cannot switch on itself; Protection status deep-links there.
-- iOS holds a flat list of blocked numbers, so Prefixes and Intervals are expanded. The app caps that at 1,000,000 entries (`Capacity`) and refuses changes that would exceed it rather than trimming them.
+- iOS holds a flat list of blocked numbers, so Prefixes and Intervals are expanded. `Capacity` is **25,000** entries — measured, not chosen: on an iPhone 15 running iOS 27.0, lists of 50,000 reload and load, while 75,000 and up make CallKit answer `loadingInterrupted` and never launch the extension. Changes that would exceed it are refused, never trimmed (`docs/adr/0004`).
+- The extension sends **deltas**: it records what it last handed CallKit and, on an incremental request, adds what arrived and removes what went away. It never calls `removeAllBlockingEntries()` — that delete is the statement CallKit is reported to fail on, and re-adding numbers CallKit already holds is an error, not a no-op.
 - Android 10 or newer: the call screening role is what gives the app the right to see incoming numbers.
 - Blocked calls on Android are rejected and stay in the system call log; no notification is posted.
+
+## When blocking does not work on iOS
+
+Work down this list; each step is something the app can tell you or something you can see.
+
+1. **Protection status** shows whether the extension ever loaded: "The extension loaded N numbers at …" means the app did its part. "never been asked to load", "never reported finishing", or a failure line names what went wrong, and `docs/research/ios-call-blocking.md` explains each.
+2. **The extension must be on** in Settings > Phone > Call Blocking & Identification. Every reinstall turns it off, and iOS offers no API to switch it on.
+3. **Sync failures are shown, not swallowed**: Protection reports "Written, but CallKit would not reload it: …" with CallKit's own words.
+4. **The list must be small** (see Capacity above). A Rule that expands past it is refused at Registration with the count that would be needed.
+5. **If the extension loads cleanly and calls still ring**, the device itself is broken, not the app. `docs/research/ios-call-blocking.md` §4c documents a device where iOS stored the blocking entries, honoured an identification entry written in the same request, and ignored the blocking entry — while its own block list worked. Apple's forums describe the same class of failure (FB20986470) with no fix released; the only reported recovery is *Reset All Settings*.
+
+### Changing the extension's Swift is a build trap
+
+The config plugin used to copy the extension's sources into the generated project, so `xcodebuild` compiled a copy that only `expo prebuild` refreshed — a deployed extension that silently differed from the repository. The plugin now links `modules/call-directory/extension/CallDirectoryExtension.swift` and `ios/RuleEngine.swift` directly. Keep it that way: if the extension ever stops matching the repo, every measurement about it becomes worthless.
