@@ -1,7 +1,7 @@
 import type { EngineStatus, Rule, RuleKind, SyncResult } from '@call-blocker/core';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { deleteRule, setBlocking } from '@/data/actions';
 import { getStatus, isSupported, previewBlockList, UNSUPPORTED_DETAIL } from '@/data/engine';
@@ -81,7 +81,11 @@ export default function RulesScreen() {
           <Banner
             tone="warning"
             title="Protection is not active"
-            message="Calls are not being blocked right now."
+            message={
+              Platform.OS === 'ios'
+                ? 'No calls are being blocked. Turn Call Blocker on in Settings › Phone › Call Blocking & Identification.'
+                : 'No calls are being blocked. Turn the call screening role on in Settings › Apps.'
+            }
             actionLabel="Open Protection status"
             onPress={() => router.push('/protection')}
           />
@@ -133,32 +137,24 @@ export default function RulesScreen() {
           {shown.map((rule, index) => (
             <View key={rule.id}>
               {index > 0 ? <Divider /> : null}
-              <View style={styles.ruleRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
-                  onLongPress={() => setMenuRule(rule)}
-                  style={styles.ruleText}>
-                  <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
-                  <AppText variant="small" tone="secondary">
-                    {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
-                  </AppText>
-                  {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
-                </Pressable>
-                <Button
-                  label="⋯"
-                  variant="secondary"
-                  onPress={() => setMenuRule(rule)}
-                  style={styles.rowMenu}
-                />
-              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityHint="Opens this Rule for editing. Touch and hold to delete it."
+                onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
+                onLongPress={() => setMenuRule(rule)}
+                style={styles.ruleRow}>
+                <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
+                <AppText variant="small" tone="secondary">
+                  {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
+                </AppText>
+                {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
+              </Pressable>
             </View>
           ))}
         </Card>
       )}
 
       <View style={styles.actions}>
-        <Button label="Register a Rule" onPress={() => router.push('/register')} style={styles.action} />
         <Button
           label="Bulk import"
           variant="secondary"
@@ -166,7 +162,6 @@ export default function RulesScreen() {
           style={styles.action}
         />
         <Button label="Number check" variant="secondary" onPress={() => router.push('/check')} style={styles.action} />
-        <Button label="Settings" variant="secondary" onPress={() => router.push('/settings')} style={styles.action} />
       </View>
 
       <AppText variant="small" tone="secondary" style={{ color: theme.secondaryText }}>
@@ -200,13 +195,11 @@ export default function RulesScreen() {
 const styles = StyleSheet.create({
   list: { gap: 0, paddingVertical: 0 },
   ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
+    gap: Spacing.half,
     minHeight: 56,
+    paddingVertical: Spacing.two,
+    justifyContent: 'center',
   },
-  ruleText: { flex: 1, gap: Spacing.half, paddingVertical: Spacing.two, justifyContent: 'center' },
-  rowMenu: { minHeight: 36, minWidth: 44, paddingHorizontal: Spacing.two },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  action: { flexGrow: 1, flexBasis: '45%' },
+  actions: { flexDirection: 'row', gap: Spacing.two },
+  action: { flex: 1 },
 });

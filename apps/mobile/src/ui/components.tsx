@@ -3,6 +3,7 @@
  * StyleSheet, so every screen looks the same without a UI dependency.
  */
 
+import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -478,9 +479,46 @@ const variantStyles = StyleSheet.create<Record<TextVariant, TextStyle>>({
   mono: { fontSize: 15, lineHeight: 21, fontFamily: Fonts?.mono },
 });
 
+/**
+ * A navigation-bar action: the platform's own symbol where it has one, the
+ * action's name where it does not. Header slots are tight, so the label only
+ * appears as the fallback.
+ */
+export function HeaderAction({
+  symbol,
+  label,
+  onPress,
+}: {
+  symbol: { ios: 'plus' | 'gearshape'; android: 'add' | 'settings' };
+  label: string;
+  onPress: () => void;
+}) {
+  const theme = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={12}
+      style={styles.headerAction}>
+      <SymbolView
+        name={{ ios: symbol.ios, android: symbol.android, web: symbol.android }}
+        size={22}
+        tintColor={theme.accent}
+        fallback={
+          <AppText variant="body" tone="accent">
+            {label}
+          </AppText>
+        }
+      />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   screenContent: { padding: Spacing.three, gap: Spacing.three },
+  headerAction: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.three, gap: Spacing.two },
   section: { gap: Spacing.two },
   row: { flexDirection: 'row' },

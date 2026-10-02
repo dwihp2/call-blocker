@@ -1,10 +1,10 @@
 import { parseRuleInput } from '@call-blocker/core';
 import type { PatternType, RegionCode, RuleInput, RuleKind } from '@call-blocker/core';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform } from 'react-native';
 
-import { registerRule, updateRule } from '@/data/actions';
+import { deleteRule, registerRule, updateRule } from '@/data/actions';
 import { registrationWarnings } from '@/data/overlap';
 import { applyRuleInput, createRule, useStore } from '@/data/store';
 import { formatCount, kindLabel, patternText } from '@/format';
@@ -13,7 +13,6 @@ import {
   Banner,
   Button,
   Card,
-  Row,
   Screen,
   Section,
   Segmented,
@@ -96,6 +95,19 @@ export default function RegisterScreen() {
     setRefusal(outcome.message);
   };
 
+  const remove = async () => {
+    if (!editing) return;
+    setBusy(true);
+    setRefusal(null);
+    const outcome = await deleteRule(editing.id);
+    setBusy(false);
+    if (outcome.ok) {
+      router.back();
+      return;
+    }
+    setRefusal(outcome.message);
+  };
+
   const help = PATTERN_HELP[pattern];
   /** The parse result when a Prefix is broad enough to need an explicit confirmation. */
   const broadValue = parsed?.ok === true && parsed.value.needsConfirmation ? parsed.value : null;
@@ -105,6 +117,7 @@ export default function RegisterScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ title: editing ? 'Edit Rule' : 'Register a Rule' }} />
       <Section title="Rule">
         <Segmented<RuleKind>
           value={kind}
@@ -215,16 +228,16 @@ export default function RegisterScreen() {
         </>
       ) : null}
 
-      <Row gap={Spacing.two}>
-        <Button
-          label={editing ? 'Save changes' : 'Save Rule'}
-          onPress={() => void save()}
-          disabled={!parsed?.ok || (broadValue !== null && !broadConfirmed)}
-          busy={busy}
-          style={styles.save}
-        />
-        <Button label="Cancel" variant="secondary" onPress={() => router.back()} />
-      </Row>
+      <Button
+        label={editing ? 'Save changes' : 'Save Rule'}
+        onPress={() => void save()}
+        disabled={!parsed?.ok || (broadValue !== null && !broadConfirmed)}
+        busy={busy}
+      />
+
+      {editing ? (
+        <Button label="Delete Rule" variant="danger" onPress={() => void remove()} busy={busy} />
+      ) : null}
 
       <AppText variant="small" tone="secondary">
         {editing
@@ -235,6 +248,3 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  save: { flex: 1 },
-});

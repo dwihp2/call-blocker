@@ -3,12 +3,17 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
 import { useStore } from '@/data/store';
-import { Loading } from '@/ui/components';
+import { HeaderAction, Loading } from '@/ui/components';
 import { useAppTheme } from '@/ui/theme';
 
 void SplashScreen.preventAutoHideAsync();
 
-/** The app's Stack: every screen is reachable from the Rules list or Settings. */
+/**
+ * The app's Stack. Only the Rules list carries header actions — Settings and
+ * Register a Rule live there instead of in the body, where they crowded the
+ * screen and duplicated what the navigation bar is for. Pushed screens show a
+ * bare chevron, so the previous screen's name never rides along in the header.
+ */
 export default function RootLayout() {
   const theme = useAppTheme();
   const router = useRouter();
@@ -31,18 +36,38 @@ export default function RootLayout() {
   return (
     <Stack
       screenOptions={{
+        headerBackButtonDisplayMode: 'minimal',
         headerStyle: { backgroundColor: theme.card },
         headerTitleStyle: { color: theme.text },
         headerTintColor: theme.accent,
         contentStyle: { backgroundColor: theme.background },
       }}>
-      <Stack.Screen name="index" options={{ title: 'Call Blocker' }} />
+      <Stack.Screen
+        name="index"
+        options={{
+          title: 'Rules',
+          headerLeft: () => (
+            <HeaderAction
+              symbol={{ ios: 'gearshape', android: 'settings' }}
+              label="Settings"
+              onPress={() => router.push('/settings')}
+            />
+          ),
+          headerRight: () => (
+            <HeaderAction
+              symbol={{ ios: 'plus', android: 'add' }}
+              label="Add"
+              onPress={() => router.push('/register')}
+            />
+          ),
+        }}
+      />
       <Stack.Screen name="register" options={{ title: 'Register a Rule' }} />
       <Stack.Screen name="bulk-import" options={{ title: 'Bulk import' }} />
       <Stack.Screen name="check" options={{ title: 'Number check' }} />
       <Stack.Screen name="backup" options={{ title: 'Backup' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-      <Stack.Screen name="protection" options={{ title: 'Protection status' }} />
+      <Stack.Screen name="protection" options={{ title: 'Protection' }} />
       <Stack.Screen name="onboarding" options={{ title: 'Set up blocking', headerShown: false }} />
     </Stack>
   );

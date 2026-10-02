@@ -1,7 +1,7 @@
 import type { EngineStatus, SyncResult } from '@call-blocker/core';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Linking, Platform, StyleSheet, View } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import {
   getStatus,
@@ -11,7 +11,6 @@ import {
   requestScreeningRole,
   syncNow,
   UNSUPPORTED_DETAIL,
-  verifyEngine,
 } from '@/data/engine';
 import { useStore } from '@/data/store';
 import { describeError, formatCount } from '@/format';
@@ -21,14 +20,12 @@ import {
   Button,
   Card,
   Divider,
-  KeyValueRow,
   Screen,
   Section,
   StatusRow,
 } from '@/ui/components';
-import { Spacing } from '@/ui/theme';
 
-type Busy = 'piece' | 'contacts' | 'sync' | 'verify';
+type Busy = 'piece' | 'contacts' | 'sync';
 
 interface Notice {
   tone: 'info' | 'warning' | 'danger' | 'success';
@@ -62,7 +59,9 @@ function syncNotice(result: SyncResult): Notice {
 
 /** The Blocking piece is a different thing on each platform. */
 function pieceDetail(): string {
-  if (Platform.OS === 'ios') return 'The Call Directory extension, switched on in Settings > Phone.';
+  if (Platform.OS === 'ios') {
+    return 'Turn Call Blocker on in Settings › Phone › Call Blocking & Identification. iOS has no other way to switch it on, and the app cannot do it for you.';
+  }
   return 'The call screening role, granted in the system settings.';
 }
 
@@ -80,7 +79,6 @@ export default function ProtectionScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<Notice | null>(null);
-  const [verifyResult, setVerifyResult] = useState<Notice | null>(null);
   const [androidRoleRefused, setAndroidRoleRefused] = useState(false);
   const supported = isSupported();
 
@@ -107,7 +105,11 @@ export default function ProtectionScreen() {
     try {
       if (Platform.OS === 'ios') {
         const opened = await openPlatformSettings();
-        if (!opened) setActionError('The Call Directory settings could not be opened on this device.');
+        if (!opened) {
+          setActionError(
+            'iOS does not let an app open Phone settings. Open Settings › Phone › Call Blocking & Identification and turn Call Blocker on.',
+          );
+        }
       } else if (androidRoleRefused) {
         const opened = await openPlatformSettings();
         if (!opened) setActionError('The call screening role settings could not be opened on this device.');
@@ -161,36 +163,6 @@ export default function ProtectionScreen() {
     }
   };
 
-  const runVerify = async () => {
-    if (busy) return;
-    setBusy('verify');
-    setActionError(null);
-    try {
-      const { failures } = await verifyEngine();
-      setVerifyResult(
-        failures.length === 0
-          ? {
-              tone: 'success',
-              title: 'The matching engine agrees',
-              message: 'Every checked-in fixture matches the matching contract.',
-            }
-          : {
-              tone: 'danger',
-              title: 'The matching engine disagrees',
-              message: failures.join('\n'),
-            },
-      );
-    } catch (reason) {
-      setVerifyResult({
-        tone: 'danger',
-        title: 'The matching engine could not be checked',
-        message: describeError(reason),
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const allowance = state.settings.contactsAllowance ? 'on' : 'off';
   const contactsDetail = `Only needed for the Contacts allowance, which is ${allowance}.`;
 
@@ -218,7 +190,11 @@ export default function ProtectionScreen() {
             <AppText variant="heading" tone={status.active ? 'success' : 'warning'}>
               {status.active ? 'Calls are being blocked.' : 'Calls are not being blocked yet.'}
             </AppText>
-            {status.detail ? <KeyValueRow label="Last sync detail" value={status.detail} /> : null}
+            {status.detail ? (
+              <AppText variant="small" tone="secondary">
+                {status.detail}
+              </AppText>
+            ) : null}
           </Card>
 
           <Section title="What Blocking needs" description="Every item below has to be on before calls can be blocked.">
@@ -255,33 +231,14 @@ export default function ProtectionScreen() {
         </>
       ) : null}
 
-      <View style={styles.actions}>
-        <Button
-          label="Sync now"
-          onPress={() => void runSync()}
-          disabled={!supported || busy !== null}
-          busy={busy === 'sync'}
-          style={styles.action}
-        />
-        <Button
-          label="Verify matching engine"
-          variant="secondary"
-          onPress={() => void runVerify()}
-          disabled={!supported || busy !== null}
-          busy={busy === 'verify'}
-          style={styles.action}
-        />
-      </View>
+      <Button
+        label="Sync now"
+        onPress={() => void runSync()}
+        disabled={!supported || busy !== null}
+        busy={busy === 'sync'}
+      />
 
       {syncResult ? <Banner tone={syncResult.tone} title={syncResult.title} message={syncResult.message} /> : null}
-      {verifyResult ? (
-        <Banner tone={verifyResult.tone} title={verifyResult.title} message={verifyResult.message} />
-      ) : null}
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  action: { flexGrow: 1, flexBasis: '45%' },
-});

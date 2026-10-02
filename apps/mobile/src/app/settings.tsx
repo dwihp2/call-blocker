@@ -3,6 +3,7 @@ import type { PermissionState, RegionCode } from '@call-blocker/core';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { setBlocking, updateSettings } from '@/data/actions';
 import {
@@ -11,6 +12,7 @@ import {
   openPlatformSettings,
   requestContactsPermission,
   UNSUPPORTED_DETAIL,
+  verifyEngine,
 } from '@/data/engine';
 import { useStore } from '@/data/store';
 import { describeError } from '@/format';
@@ -125,6 +127,21 @@ export default function SettingsScreen() {
     }
   };
 
+  /** Runs the matching contract on this device; a failure means the engines drifted apart. */
+  const checkEngine = async () => {
+    try {
+      const { failures } = await verifyEngine();
+      Alert.alert(
+        failures.length === 0 ? 'The matching engine agrees' : 'The matching engine disagrees',
+        failures.length === 0
+          ? 'Every case in the matching contract passes on this device.'
+          : failures.join('\n'),
+      );
+    } catch (reason) {
+      Alert.alert('The matching engine could not be checked', describeError(reason));
+    }
+  };
+
   const openSystemSettings = async () => {
     try {
       const opened = await openPlatformSettings();
@@ -228,6 +245,12 @@ export default function SettingsScreen() {
           <KeyValueRow label="App version" value={APP_VERSION} />
           <Divider />
           <KeyValueRow label="Matching contract version" value={CONTRACT_VERSION} />
+          <Divider />
+          <NavRow
+            label="Check the matching engine"
+            detail="Runs the matching contract on this device and reports what disagrees."
+            onPress={() => void checkEngine()}
+          />
         </Card>
       </Section>
     </Screen>
