@@ -253,6 +253,26 @@ export async function syncNow(): Promise<SyncResult> {
   return result ?? { written: false, entries: 0, capacity: 0, overflow: false, rejected: [] };
 }
 
+let reconciled = false;
+
+/**
+ * Pushes the Rules to the platform once per launch. iOS only consults the block
+ * list the extension handed it, and that list can go stale while the app is
+ * closed — most often because the extension was switched on in Settings after
+ * the last sync. The platform decides whether the request is worth honouring;
+ * failures are left to Protection status to report rather than blocking a launch.
+ */
+export async function reconcileOnLaunch(): Promise<void> {
+  if (reconciled) return;
+  reconciled = true;
+  if (!isSupported()) return;
+  try {
+    await syncNow();
+  } catch {
+    // A launch is not the place to surface a sync failure.
+  }
+}
+
 /**
  * iOS only: how many numbers the Rules the app holds would take in the
  * blocking list, without writing anything. `null` elsewhere.

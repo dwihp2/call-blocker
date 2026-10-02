@@ -521,6 +521,7 @@ public struct CallDirectoryStore {
   public static let numbersKey = "blocked.json"
   public static let metaKey = "meta.json"
   public static let loadKey = "load.json"
+  public static let reloadKey = "reload.json"
 
   public let appGroup: String
   private let defaults: UserDefaults
@@ -564,6 +565,28 @@ public struct CallDirectoryStore {
     ])
     defaults.set(numbersJSON, forKey: Self.numbersKey)
     defaults.set(String(decoding: metaJSON, as: UTF8.self), forKey: Self.metaKey)
+  }
+
+  /**
+   What the app's last reload request came back with. The extension's own report
+   says whether it ran; this says whether CallKit even accepted the request, and
+   the two together are the only way to tell "never asked" from "asked and
+   refused".
+   */
+  public func writeReload(at: String, error: String?) {
+    let object: [String: Any] = ["at": at, "error": error ?? ""]
+    guard let data = try? JSONSerialization.data(withJSONObject: object) else {
+      return
+    }
+    defaults.set(String(decoding: data, as: UTF8.self), forKey: Self.reloadKey)
+  }
+
+  public func readReload() -> [String: String]? {
+    guard let json = defaults.string(forKey: Self.reloadKey),
+          let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
+      return nil
+    }
+    return ["at": object["at"] as? String ?? "", "error": object["error"] as? String ?? ""]
   }
 
   /** Records what the extension did, for the app to show in Protection status. */

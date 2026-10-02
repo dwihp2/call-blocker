@@ -122,6 +122,24 @@ Apple documents **no** number: the error case exists, the threshold does not. Pr
 
 Practical reading: the ceiling is per-extension and undocumented, in the millions; 111,112 entries is well inside it, so `maximumEntriesExceeded` is an unlikely explanation for our failure. Both load time (≈100 s per million) and database churn are the real costs of large lists.
 
+## 4b. Measured on the device, 2026-10-02
+
+After fixing the build trap (§3b) the extension reports what it does, and the app records what CallKit answers. On the iPhone 15 / iOS 27.0 test device, same app, same build, same code — **only the size of the block list changed**:
+
+| Entries written | `reloadExtension` | Extension ran |
+|---|---|---|
+| 1 | no error | yes, loaded 1 |
+| 1,111 | no error | yes |
+| 11,111 | no error | yes |
+| **50,000** | no error | yes |
+| **75,000** | **error 2, `loadingInterrupted`** | **no** |
+| 100,000 | error 2, `loadingInterrupted` | no |
+| 111,112 (the real Rules) | error 2, `loadingInterrupted` | no |
+
+So the failure is not the mechanism, the entitlements, the App Group, the build, or the device: **`reloadExtension` is interrupted before the extension is ever launched once the list is large enough**, and the threshold on this device sits between 50,000 and 75,000 entries. That is the same error — 2, `loadingInterrupted` — that [thread 693747](https://developer.apple.com/forums/thread/693747) reports for an app that "frequently keep[s] updating the list of blocked numbers", unanswered since 2021.
+
+The consequence for the design is blunt: on iOS the list must stay small. Our prefix rule (`+6282356090` → 111,111 entries) can never work, and neither can any expansion in the tens of thousands. The Capacity cap of 1,000,000 that the app enforces is wrong by an order of magnitude.
+
 ## 5. Alternatives
 
 | Approach | Can it block a call? | What it requires | Limits |
@@ -158,7 +176,7 @@ The same page documents *Unknown Callers* ("Calls from unknown numbers are remov
 
 1. **Test whether the phone itself is broken** before changing more code: ask the user whether any *other* call-blocking app on that device blocks a call today. All of them failing means device-level CallKit corruption, which no app can fix — only *Reset All Settings*, or waiting for Apple.
 2. **Never call `removeAllBlockingEntries()` as a shortcut.** The failure that is on record is a `DELETE FROM PhoneNumberBlockingEntry`; removing and re-inserting the whole list on every reload is the maximum exposure to it. Send the delta — remove only the numbers that went away, add only the ones that arrived, as CallKitty does (§3c) — or keep the list small enough that a reload has almost nothing to change.
-3. **Stop expanding prefixes into six-figure entry counts.** Every reload inserts the whole list again, which is both slow (~100 s per million) and the churn pattern associated with the corruption reports. Cap the expansion far below 1,000,000 and say so at Registration.
+3. **Stop expanding prefixes into six-figure entry counts — the measured ceiling is between 50,000 and 75,000 (§4b).** Every reload inserts the whole list again, and above that size CallKit answers `loadingInterrupted` and never launches the extension. Cap the expansion where it is known to work (a figure in the low tens of thousands, with the count shown at Registration), not at 1,000,000.
 4. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success. Then restructure `beginRequest` to match the working implementations in §3c: add synchronously, complete at the end, and send deltas when the request is incremental.
 5. **Surface the reload error verbatim** (`reloadError`), and translate the documented codes (3, 4, 5, 6, 102) into sentences a person can act on. Partly done.
 6. **Fix the build trap before trusting any instrumentation** (§3b): the plugin must reference the module's extension sources rather than copying them at prebuild, and it must fix the delegate method name, or the extension source does not even compile.
@@ -180,7 +198,7 @@ Every test above is one action for the person holding the phone, and each result
 
 ## 7. What we still do not know
 
-- **The exact error our device returns from `reloadExtension`.** The app reports it in Protection status ("Written, but CallKit would not reload it: …") — but only once a *correct* prebuild has been deployed: the version on the device carries neither that reporting nor the extension-side load report (see §3b). `102` or a SQLite `Code=11` would each confirm a different hypothesis.
+- ~~The exact error our device returns from `reloadExtension`.~~ **Answered (§4b): error 2, `loadingInterrupted`, above roughly 50,000 entries; no error at or below it.** The previous open question was: The app reports it in Protection status ("Written, but CallKit would not reload it: …") — but only once a *correct* prebuild has been deployed: the version on the device carries neither that reporting nor the extension-side load report (see §3b). `102` or a SQLite `Code=11` would each confirm a different hypothesis.
 - **Whether the CallKit database on our test device is corrupt** — the other-apps test above settles it.
 - **The system's time budget for `beginRequest`.** Documented nowhere; the `expired` flag is the only way to observe it, which our extension now records.
 - **Whether our chunked, asynchronous adding (10,000 entries per queue hop) makes expiration more likely** than adding synchronously inside `beginRequest`. Worth measuring on a healthy device.

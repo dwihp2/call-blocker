@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
+import { reconcileOnLaunch } from '@/data/engine';
 import { useStore } from '@/data/store';
 import { HeaderAction, Loading } from '@/ui/components';
 import { useAppTheme } from '@/ui/theme';
@@ -23,6 +24,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    void reconcileOnLaunch();
   }, [ready]);
 
   useEffect(() => {

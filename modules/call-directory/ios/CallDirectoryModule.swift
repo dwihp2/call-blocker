@@ -67,6 +67,10 @@ public class CallDirectoryModule: Module {
       }
 
       CXCallDirectoryManager.sharedInstance.reloadExtension(withIdentifier: self.extensionBundleIdentifier) { error in
+        // Recorded where both the app and a developer can see it: the extension's
+        // own report says whether it ran, this says whether CallKit accepted the
+        // request at all.
+        self.store.writeReload(at: ISO8601DateFormatter().string(from: Date()), error: error?.localizedDescription)
         // The numbers are in the store either way, so nothing here fails: the
         // reload's own outcome is reported instead. Keeping it quiet was how the
         // app came to say "saved" while CallKit had refused to load anything.
