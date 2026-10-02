@@ -140,6 +140,23 @@ So the failure is not the mechanism, the entitlements, the App Group, the build,
 
 The consequence for the design is blunt: on iOS the list must stay small. Our prefix rule (`+6282356090` → 111,111 entries) can never work, and neither can any expansion in the tens of thousands. The Capacity cap of 1,000,000 that the app enforces is wrong by an order of magnitude.
 
+## 4c. The blocking path itself is dead on the test device
+
+With every other variable eliminated — fresh app install, fresh extension registration, no legacy rows, a single-number Rule, a clean load (no reload error, no expiry, no delegate failure) — the test device (iPhone 15, iOS 27.0) behaves like this:
+
+| Evidence | Result |
+|---|---|
+| `removeAllBlockingEntries()` removed, deltas only | load completes cleanly |
+| Blocking rows in CallKit's store | present — inserting them again fails with `UNIQUE constraint failed: PhoneNumberBlockingEntry`, which only happens when the row exists |
+| Identification entry for the *same number*, same request | **applies** — the number shows "Call Blocker: Blocked by Call Blocker" in Recents |
+| **Blocking entry for that number** | **ignored** — the call rings, and the log shows `fetchLiveBlockingInfoForHandle … block=NO` |
+| The system block list (Settings › Phone › Blocked Contacts) | **blocks** the same call: `VoicemailReason::BlockedCall` |
+| Logs | no SQLite corruption, no delegate failure, no expired request |
+
+So on this device iOS stores and applies our identification entries and ignores our blocking entries, while its own block list works. Nothing in the app can influence that: the same `beginRequest`, the same context, the same numbers, the same transaction.
+
+This is the failure mode the Apple forums describe for the CallKit database bug (FB20986470, §3), whose only reported recovery is *Reset All Settings*. It is also the reason the app must **detect** the state rather than assume success — which it now does, through the extension's load report and the reload error surfacing in Protection status. For a device in this state, the only routes to working call blocking are an iOS update, a full settings reset, or moving the decision server-side with Live Caller ID Lookup (§5).
+
 ## 5. Alternatives
 
 | Approach | Can it block a call? | What it requires | Limits |
@@ -199,7 +216,7 @@ Every test above is one action for the person holding the phone, and each result
 ## 7. What we still do not know
 
 - ~~The exact error our device returns from `reloadExtension`.~~ **Answered (§4b): error 2, `loadingInterrupted`, above roughly 50,000 entries; no error at or below it.** The previous open question was: The app reports it in Protection status ("Written, but CallKit would not reload it: …") — but only once a *correct* prebuild has been deployed: the version on the device carries neither that reporting nor the extension-side load report (see §3b). `102` or a SQLite `Code=11` would each confirm a different hypothesis.
-- **Whether the CallKit database on our test device is corrupt** — the other-apps test above settles it.
+- ~~Whether the CallKit database on our test device is corrupt~~ — settled in §4c: blocking entries are stored and not honoured, identification entries from the same request are honoured, and the system block list works. It is the blocking path, not the database as a whole.
 - **The system's time budget for `beginRequest`.** Documented nowhere; the `expired` flag is the only way to observe it, which our extension now records.
 - **Whether our chunked, asynchronous adding (10,000 entries per queue hop) makes expiration more likely** than adding synchronously inside `beginRequest`. Worth measuring on a healthy device.
 - **Whether re-adding the entire list on every incremental request is itself a corruption trigger.** The officially unknown cause has a known *symptom* — a failing `DELETE FROM PhoneNumberBlockingEntry` — and our reload-everything pattern maximises the number of those statements. Whether the delete is the trigger or the first casualty is not established.

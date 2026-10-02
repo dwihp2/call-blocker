@@ -22,14 +22,6 @@ import Foundation
 public final class CallDirectoryExtension: CXCallDirectoryProvider {
   private static let chunkSize = 10_000
 
-  /**
-   TEMPORARY DIAGNOSTIC. Identification entries travel the same path as blocking
-   entries but are visible in Recents as "<App>: <label>", which is the only way
-   to see from the outside whether this extension's data reaches the system at
-   all. Remove once the question is answered.
-   */
-  private static let probeLabel = "Blocked by Call Blocker"
-
   private let queue = DispatchQueue(label: "com.callblocker.call-directory.extension", qos: .userInitiated)
 
   public override func beginRequest(with context: CXCallDirectoryExtensionContext) {
@@ -70,8 +62,7 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
 
   /**
    Adds the new numbers in ascending order, a chunk per pass, then removes the
-   ones that went away — separately, because blocking and identification are
-   independent sequences and CallKit requires each to ascend.
+   ones that went away.
    */
   private func apply(
     additions: [Int64],
@@ -88,15 +79,6 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
       context.addBlockingEntry(withNextSequentialPhoneNumber: CXCallDirectoryPhoneNumber(additions[position]))
       position += 1
     }
-    position = index
-    while position < end {
-      context.addIdentificationEntry(
-        withNextSequentialPhoneNumber: CXCallDirectoryPhoneNumber(additions[position]),
-        label: Self.probeLabel
-      )
-      position += 1
-    }
-
     guard end < additions.count else {
       for number in removals {
         context.removeBlockingEntry(withPhoneNumber: CXCallDirectoryPhoneNumber(number))
