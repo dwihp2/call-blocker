@@ -10,6 +10,8 @@ Researched 2026-10-02 for a device on **iOS 27.0 (24A437)**, Xcode 27. Sources a
 4. **Our design is the pattern that provokes it**: expanding a prefix into 111,112 entries and rewriting the whole list on every change.
 5. **No alternative removes the entry-count problem** except moving the list server-side with Live Caller ID Lookup (iOS 18+), which requires running a PIR service and Apple endpoint validation.
 
+**One correction belongs in this summary:** the evidence that our test device's extension "never ran" is withdrawn — the build on that device compiled a stale copy of the extension that carried no instrumentation at all (§3b). The corruption bug and the other failure modes below are candidates, not conclusions.
+
 ## 1. The only mechanism, and what it cannot do
 
 Apple: "Create a Call Directory app extension to identify and block incoming callers by their phone number." ([Identifying and blocking calls](https://developer.apple.com/documentation/callkit/identifying-and-blocking-calls))
@@ -73,6 +75,33 @@ Two weeks before this research, the same engineer answered a request for an upda
 
 **Why this fits our evidence:** extension enabled, reload requested many times, extension never once launched (no load report), no crash log, and none of the usual remedies (re-enable, reboot, reinstall) changed anything. The one prediction it makes that we have not yet tested: **the other call-blocking apps on the same phone should also be failing.** The reporter tested exactly that and found they all fail.
 
+## 3b. Correction, same day: our "never loaded" evidence was an artefact
+
+While finishing this research I checked the extension source that the *device build* actually compiled, and it is not the source in `modules/call-directory/extension/`:
+
+- The config plugin **copies** the extension's Swift files into the generated `apps/mobile/ios/CallDirectoryExtension/` directory during `expo prebuild`. Subsequent `xcodebuild` runs compile that copy, not the module's file.
+- The generated copy is dated 2026-09-30 12:12 and contains **no** `writeLoad` call and **no** `CXCallDirectoryExtensionContextDelegate` conformance — both were added to the module after that prebuild.
+- Therefore the load report could not have been written by the deployed extension, and **"the load report never appeared" does not mean the extension never ran**. That conclusion, stated earlier in this project, is withdrawn.
+
+What survives: iOS reports the extension as enabled; the block list is not in force; every failure mode in §3 remains a candidate, including the database corruption of §3. The two tests in §6 are still the right next step — but they must be run against a build whose extension is actually instrumented, which requires `expo prebuild` (or a plugin that references the module's sources instead of copying them).
+
+Two further consequences worth recording:
+
+1. **The module's extension source does not compile as it stands.** `swiftc -typecheck` on `modules/call-directory/extension/CallDirectoryExtension.swift` fails: the delegate method is spelled `callDirectoryExtensionContext(_:didFailWithError:)`, while the SDK requires `requestFailed(for:withError:)` (`CXCallDirectoryExtensionContext.h:18`; the compiler's own diagnostic names the requirement). The device builds passed only because the stale copy was compiled. Whoever fixes the copy step must fix that name in the same change.
+2. The app-side status text "The extension has never been asked to load" reads the *absence* of a report as evidence, which this artefact proves is unsafe. It should say "no load has been recorded" instead.
+
+## 3c. What reference implementations actually do
+
+Three public implementations read while writing this (all set `context.delegate` first, which the API notes call for):
+
+| Implementation | Structure of `beginRequest` |
+|---|---|
+| [CallKitty](https://github.com/beepscore/CallKitty/blob/master/CallKittyDirectoryExtension/CallDirectoryHandler.swift) | Sets the delegate, then branches on `context.isIncremental`: on a full request it adds every blocking and identification entry; on an incremental one it adds and removes **deltas** with `removeBlockingEntry(withPhoneNumber:)` / `removeIdentificationEntry(withPhoneNumber:)`. It dispatches the work to a background queue but calls `completeRequest()` immediately at the end of `beginRequest` — with a `TODO: may need to check if ok to use background queue here`. |
+| [TouchInstinct CallDirectoryDemo](https://github.com/TouchInstinct/CallDirectoryDemo-ios/blob/master/TouchInApp/TouchInCallExtension/CallDirectoryHandler.swift) | Adds blocking numbers **synchronously**, then streams identification entries from an App Group file line by line inside `autoreleasepool`, then `completeRequest()` — all on the request's thread. On failure it calls `context.cancelRequest(withError:)` with its own error. |
+| [flutter_callkit](https://github.com/voximplant/flutter_callkit/blob/master/doc/call_directory/README.md) | Reads an app-group `UserDefaults` array and adds blocking and identification entries in a plain loop, synchronously. |
+
+The common shape: **add entries synchronously inside `beginRequest`, then complete**, with deltas rather than a full rewrite when the request is incremental. Our extension instead dispatches to a background queue, hops between chunks, and completes later — the one structural difference from every working example found, and the reason a long load can silently expire (§2). Two of the three also call `context.cancelRequest(withError:)` on failure, which surfaces a problem to the system instead of leaving a half-written request.
+
 ## 4. Limits: what is documented versus observed
 
 Apple documents **no** number: the error case exists, the threshold does not. Practitioner reports:
@@ -106,13 +135,13 @@ Sources: [Live Caller ID Lookup overview](https://developer.apple.com/documentat
 
 1. **Test whether the phone itself is broken** before changing more code: ask the user whether any *other* call-blocking app on that device blocks a call today. All of them failing means device-level CallKit corruption, which no app can fix — only *Reset All Settings*, or waiting for Apple.
 2. **Stop expanding prefixes into six-figure entry counts.** Every reload inserts the whole list again, which is both slow (~100 s per million) and the churn pattern associated with the corruption reports. Cap the expansion far below 1,000,000 and say so at Registration.
-3. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success.
+3. **Read `completeRequest`'s `expired` flag** and treat it as a load failure — today a timed-out load is indistinguishable from success. Then restructure `beginRequest` to match the working implementations in §3c: add synchronously, complete at the end, and send deltas when the request is incremental.
 4. **Surface the reload error verbatim** (`reloadError`), and translate the documented codes (3, 4, 5, 6, 102) into sentences a person can act on. Partly done.
-5. **Keep the load report** (started/finished/entries/duration) as the app's only sight of whether the extension ever ran.
+5. **Fix the build trap before trusting any instrumentation** (§3b): the plugin must reference the module's extension sources rather than copying them at prebuild, and it must fix the delegate method name, or the extension source does not even compile.
 
 ## 7. What we still do not know
 
-- **The exact error our device returns from `reloadExtension`.** The app now reports it in Protection status ("Written, but CallKit would not reload it: …"); no one has read that string on the device yet. `102` or a SQLite `Code=11` would each confirm a different hypothesis.
+- **The exact error our device returns from `reloadExtension`.** The app reports it in Protection status ("Written, but CallKit would not reload it: …") — but only once a *correct* prebuild has been deployed: the version on the device carries neither that reporting nor the extension-side load report (see §3b). `102` or a SQLite `Code=11` would each confirm a different hypothesis.
 - **Whether the CallKit database on our test device is corrupt** — the other-apps test above settles it.
 - **The system's time budget for `beginRequest`.** Documented nowhere; the `expired` flag is the only way to observe it, which our extension now records.
 - **Whether our chunked, asynchronous adding (10,000 entries per queue hop) makes expiration more likely** than adding synchronously inside `beginRequest`. Worth measuring on a healthy device.
