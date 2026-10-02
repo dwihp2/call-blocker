@@ -188,18 +188,42 @@ public class CallDirectoryModule: Module {
   }
 
   private func statusDetail(pieceOn: Bool, error: Error?) -> String {
-    let howToTurnOn = "Turn Call Blocker on in Settings › Phone › Call Blocking & Identification."
-    if let meta = store.readMeta() {
-      let written = "\(Self.grouped(meta.entries)) numbers blocked, last written \(Self.readable(meta.generatedAt))."
-      return pieceOn ? written : "\(written) \(howToTurnOn)"
-    }
     // CallKit reports an error while the extension has never been turned on,
     // which is the state of every fresh install: that is "off", not a failure
     // worth showing the person.
     if let error, !Self.isCallDirectoryManagerError(error) {
       return error.localizedDescription
     }
-    return "No block list has been written yet. \(howToTurnOn)"
+    let howToTurnOn = "Turn Call Blocker on in Settings › Phone › Call Blocking & Identification."
+    var parts: [String] = []
+    if let meta = store.readMeta() {
+      parts.append("\(Self.grouped(meta.entries)) numbers written \(Self.readable(meta.generatedAt)).")
+    } else {
+      parts.append("No block list has been written yet.")
+    }
+    parts.append(loadSentence())
+    if !pieceOn {
+      parts.append(howToTurnOn)
+    }
+    return parts.joined(separator: " ")
+  }
+
+  /**
+   What the extension last did. This is the difference between "CallKit never
+   ran the extension" and "the extension loaded the numbers and a call was let
+   through anyway", which need opposite fixes.
+   */
+  private func loadSentence() -> String {
+    guard let load = store.readLoad() else {
+      return "The extension has never been asked to load."
+    }
+    if let failure = load.failure {
+      return "CallKit refused the load at \(Self.readable(load.finishedAt ?? load.startedAt)): \(failure)"
+    }
+    guard let finished = load.finishedAt else {
+      return "The extension started loading \(Self.grouped(load.entries)) numbers at \(Self.readable(load.startedAt)) and never reported finishing."
+    }
+    return "The extension loaded \(Self.grouped(load.entries)) numbers at \(Self.readable(finished))."
   }
 
   /** CallKit answers `unknown` with this error while the extension has never been enabled. */

@@ -27,6 +27,7 @@ const DEPLOYMENT_TARGET = '16.4';
  * @property {string} displayName
  * @property {string} version
  * @property {string} buildNumber
+ * @property {string} [appleTeamId] Development team the extension target signs with.
  */
 
 /**

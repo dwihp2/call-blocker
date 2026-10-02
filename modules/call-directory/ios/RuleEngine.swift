@@ -487,6 +487,29 @@ public enum CallDirectoryStoreError: Error, LocalizedError {
 }
 
 /**
+ What the extension did the last time CallKit asked it to load. Without it,
+ nothing distinguishes "the extension loaded the numbers" from "the system never
+ ran the extension", which are the two very different reasons a call is not
+ blocked.
+ */
+public struct CallDirectoryLoad {
+  public let startedAt: String
+  public let finishedAt: String?
+  public let entries: Int
+  public let incremental: Bool
+  /** What CallKit said when it refused the load, if it did. */
+  public let failure: String?
+
+  public init(startedAt: String, finishedAt: String?, entries: Int, incremental: Bool, failure: String? = nil) {
+    self.startedAt = startedAt
+    self.finishedAt = finishedAt
+    self.entries = entries
+    self.incremental = incremental
+    self.failure = failure
+  }
+}
+
+/**
  The App Group store the app writes and the extension reads. It lives here rather
  than in a third file because both targets compile this one: the app through its
  pod, the extension through the plugin's copied sources.
@@ -497,6 +520,7 @@ public struct CallDirectoryStore {
   public static let defaultAppGroup = "group.com.callblocker.app"
   public static let numbersKey = "blocked.json"
   public static let metaKey = "meta.json"
+  public static let loadKey = "load.json"
 
   public let appGroup: String
   private let defaults: UserDefaults
@@ -540,5 +564,36 @@ public struct CallDirectoryStore {
     ])
     defaults.set(numbersJSON, forKey: Self.numbersKey)
     defaults.set(String(decoding: metaJSON, as: UTF8.self), forKey: Self.metaKey)
+  }
+
+  /** Records what the extension did, for the app to show in Protection status. */
+  public func writeLoad(_ load: CallDirectoryLoad) {
+    let object: [String: Any] = [
+      "startedAt": load.startedAt,
+      "finishedAt": load.finishedAt ?? "",
+      "entries": load.entries,
+      "incremental": load.incremental,
+      "failure": load.failure ?? ""
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: object) else {
+      return
+    }
+    defaults.set(String(decoding: data, as: UTF8.self), forKey: Self.loadKey)
+  }
+
+  public func readLoad() -> CallDirectoryLoad? {
+    guard let json = defaults.string(forKey: Self.loadKey),
+          let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
+      return nil
+    }
+    let finished = object["finishedAt"] as? String ?? ""
+    let failure = object["failure"] as? String ?? ""
+    return CallDirectoryLoad(
+      startedAt: object["startedAt"] as? String ?? "",
+      finishedAt: finished.isEmpty ? nil : finished,
+      entries: object["entries"] as? Int ?? 0,
+      incremental: object["incremental"] as? Bool ?? false,
+      failure: failure.isEmpty ? nil : failure
+    )
   }
 }
