@@ -94,8 +94,15 @@ extension EngineDecision: CustomStringConvertible {
  Capacity: how many numbers the iPhone can hold in its blocking list at once. A
  change that would push the Effective block list past it is refused, never
  silently trimmed (see `docs/adr/0004`).
+
+ The number is measured, not chosen: on an iPhone 15 running iOS 27.0, lists of
+ 1, 1'111, 11'111 and 50'000 entries all reload cleanly and load, while 75'000,
+ 100'000 and 111'112 make CallKit answer `loadingInterrupted` and never launch
+ the extension at all — the failure that kept this app from blocking anything
+ (see `docs/research/ios-call-blocking.md` §4b). 25'000 leaves half the measured
+ ceiling as headroom.
  */
-public let callDirectoryCapacity = 1_000_000
+public let callDirectoryCapacity = 25_000
 
 /** The longest number E.164 allows, and so the length a Prefix expands to. */
 private let maxE164Digits = 15
@@ -522,6 +529,7 @@ public struct CallDirectoryStore {
   public static let metaKey = "meta.json"
   public static let loadKey = "load.json"
   public static let reloadKey = "reload.json"
+  public static let loadedKey = "loaded.json"
 
   public let appGroup: String
   private let defaults: UserDefaults
@@ -565,6 +573,32 @@ public struct CallDirectoryStore {
     ])
     defaults.set(numbersJSON, forKey: Self.numbersKey)
     defaults.set(String(decoding: metaJSON, as: UTF8.self), forKey: Self.metaKey)
+  }
+
+  /**
+   The numbers this extension last handed to CallKit. Incremental requests must
+   say what changed, not re-state everything, so the difference against this list
+   is the whole request.
+   */
+  public func writeLoaded(_ numbers: [Int64]) {
+    guard let data = try? JSONEncoder().encode(numbers.map(String.init)) else {
+      return
+    }
+    defaults.set(String(decoding: data, as: UTF8.self), forKey: Self.loadedKey)
+  }
+
+  /**
+   The numbers CallKit holds for this extension. When nothing has been recorded
+   yet, the blocking list itself is the best answer: an entry that is already
+   there cannot be added again — CallKit answers `UNIQUE constraint failed:
+   PhoneNumberBlockingEntry`, which only happens when the row exists.
+   */
+  public func readLoaded() -> [Int64] {
+    guard let json = defaults.string(forKey: Self.loadedKey),
+          let strings = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
+      return readNumbers()
+    }
+    return Array(Set(strings.compactMap { Int64($0) })).sorted()
   }
 
   /**
