@@ -2,14 +2,24 @@
 const fs = require('fs');
 const path = require('path');
 
-/** The module's own Swift sources, copied into the generated project. */
 const PACKAGE_ROOT = path.join(__dirname, '..');
-const EXTENSION_SOURCE = path.join(PACKAGE_ROOT, 'extension', 'CallDirectoryExtension.swift');
-const ENGINE_SOURCE = path.join(PACKAGE_ROOT, 'ios', 'RuleEngine.swift');
 
-/** The Swift files the extension target compiles, and the engine the app target compiles as well. */
-const EXTENSION_SOURCES = ['CallDirectoryExtension.swift', 'RuleEngine.swift'];
-const ENGINE_SOURCE_NAME = 'RuleEngine.swift';
+/**
+ * The extension's Swift files, addressed where the module keeps them rather than
+ * copied into the generated project. A copy is only refreshed by `expo prebuild`,
+ * so a plain `xcodebuild` would quietly compile yesterday's extension — which is
+ * exactly how a load report that was never in the binary looked like evidence
+ * that the extension never ran.
+ *
+ * Paths are relative to the generated `ios/` directory, which is three levels
+ * below the repository root.
+ */
+const MODULE_RELATIVE_ROOT = '../../../modules/call-directory';
+const EXTENSION_SOURCES = [
+  `${MODULE_RELATIVE_ROOT}/extension/CallDirectoryExtension.swift`,
+  `${MODULE_RELATIVE_ROOT}/ios/RuleEngine.swift`,
+];
+const ENGINE_SOURCE = EXTENSION_SOURCES[1];
 
 /**
  * @typedef {import('./withCallDirectory').CallDirectoryOptions} CallDirectoryOptions
@@ -89,8 +99,6 @@ function extensionEntitlements(options) {
 function writeExtensionFiles({ platformProjectRoot, options }) {
   const directory = path.join(platformProjectRoot, options.extensionName);
   fs.mkdirSync(directory, { recursive: true });
-  fs.copyFileSync(EXTENSION_SOURCE, path.join(directory, 'CallDirectoryExtension.swift'));
-  fs.copyFileSync(ENGINE_SOURCE, path.join(directory, ENGINE_SOURCE_NAME));
   fs.writeFileSync(path.join(directory, `${options.extensionName}-Info.plist`), extensionInfoPlist(options));
   fs.writeFileSync(path.join(directory, `${options.extensionName}.entitlements`), extensionEntitlements(options));
   return directory;
@@ -111,6 +119,6 @@ function escapeXml(value) {
 
 module.exports = {
   EXTENSION_SOURCES,
-  ENGINE_SOURCE_NAME,
+  ENGINE_SOURCE,
   writeExtensionFiles,
 };

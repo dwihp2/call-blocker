@@ -3,7 +3,7 @@ const path = require('path');
 const { IOSConfig } = require('@expo/config-plugins');
 
 const { Target, XcodeUtils } = IOSConfig;
-const { EXTENSION_SOURCES, ENGINE_SOURCE_NAME } = require('./extensionFiles');
+const { EXTENSION_SOURCES, ENGINE_SOURCE } = require('./extensionFiles');
 
 /** Xcode's own name for the phase that copies an app extension into the app. */
 const EMBED_PHASE_NAME = 'Embed App Extensions';
@@ -47,20 +47,12 @@ function addCallDirectoryExtension(project, options) {
   // none of its own.
   ensureSourcesPhase(project, extensionUuid);
   for (const file of EXTENSION_SOURCES) {
-    linkSourceFile(project, {
-      filepath: path.posix.join(extensionName, file),
-      groupName: extensionName,
-      targetUuid: extensionUuid,
-    });
+    linkSourceFile(project, { filepath: file, groupName: extensionName, targetUuid: extensionUuid });
   }
   // The app target compiles the engine too. The module's Swift and the
   // extension's must agree on what a Rule covers, and one file cannot drift
   // from itself.
-  linkSourceFile(project, {
-    filepath: path.posix.join(extensionName, ENGINE_SOURCE_NAME),
-    groupName: extensionName,
-    targetUuid: applicationUuid,
-  });
+  linkSourceFile(project, { filepath: ENGINE_SOURCE, groupName: extensionName, targetUuid: applicationUuid });
 
   applyExtensionBuildSettings(project, extensionUuid, options);
   linkExtensionDependency(project, applicationUuid, extensionUuid);
