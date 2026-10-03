@@ -66,23 +66,10 @@ public class CallDirectoryModule: Module {
         return
       }
 
-      CXCallDirectoryManager.sharedInstance.reloadExtension(withIdentifier: self.extensionBundleIdentifier) { error in
-        // Recorded where both the app and a developer can see it: the extension's
-        // own report says whether it ran, this says whether CallKit accepted the
-        // request at all.
-        self.store.writeReload(at: ISO8601DateFormatter().string(from: Date()), error: error?.localizedDescription)
-        // The numbers are in the store either way, so nothing here fails: the
-        // reload's own outcome is reported instead. Keeping it quiet was how the
-        // app came to say "saved" while CallKit had refused to load anything.
-        promise.resolve(SyncResultRecord(
-          written: true,
-          entries: numbers.count,
-          capacity: callDirectoryCapacity,
-          overflow: false,
-          rejected: [],
-          reloadError: error?.localizedDescription
-        ))
-      }
+      // The numbers are in the store either way, so nothing here fails: the
+      // reload's own outcome is reported instead. Keeping it quiet was how the
+      // app came to say "saved" while CallKit had refused to load anything.
+      requestReload(promise)
     }
 
     // Costs the same numbers as `sync` without writing or reloading anything.
@@ -137,6 +124,65 @@ public class CallDirectoryModule: Module {
       }
     }
     .runOnQueue(.main)
+  }
+
+  // MARK: - Reloads
+
+  /**
+   One `reloadExtension` at a time, each covering every write that preceded it.
+
+   CallKit is reported to answer `loadingInterrupted` for apps that reload
+   frequently (docs/research/ios-call-blocking.md §3), and overlapping requests
+   cannot help anyway: the extension reads the store when the system launches
+   it, so a reload always loads the latest write. A burst of syncs — onboarding,
+   a Restore, one screen changing several settings — therefore becomes one
+   leading reload plus, if writes landed while it ran, one trailing reload that
+   covers all of them.
+   */
+  private let reloadQueue = DispatchQueue(label: "com.callblocker.call-directory.reload")
+  private var reloadWaiters: [Promise] = []
+  private var reloadInFlight = false
+
+  private func requestReload(_ promise: Promise) {
+    reloadQueue.async {
+      self.reloadWaiters.append(promise)
+      self.fireReload()
+    }
+  }
+
+  /** Must run on `reloadQueue`. */
+  private func fireReload() {
+    guard !reloadInFlight, !reloadWaiters.isEmpty else {
+      return
+    }
+    let batch = reloadWaiters
+    reloadWaiters = []
+    reloadInFlight = true
+
+    CXCallDirectoryManager.sharedInstance.reloadExtension(withIdentifier: extensionBundleIdentifier) { error in
+      // Recorded where both the app and a developer can see it: the extension's
+      // own report says whether it ran, this says whether CallKit accepted the
+      // request at all.
+      self.store.writeReload(at: ISO8601DateFormatter().string(from: Date()), error: error?.localizedDescription)
+      self.reloadQueue.async {
+        self.reloadInFlight = false
+        // Every waiter reports the list CallKit was actually handed: the last
+        // write the batch covered, not whatever that caller wrote itself.
+        let entries = self.store.readMeta()?.entries ?? 0
+        for promise in batch {
+          promise.resolve(SyncResultRecord(
+            written: true,
+            entries: entries,
+            capacity: callDirectoryCapacity,
+            overflow: false,
+            rejected: [],
+            reloadError: error?.localizedDescription
+          ))
+        }
+        // Writes that landed while this reload ran still need one of their own.
+        self.fireReload()
+      }
+    }
   }
 
   // MARK: - Configuration

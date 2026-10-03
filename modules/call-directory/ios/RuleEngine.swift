@@ -588,15 +588,24 @@ public struct CallDirectoryStore {
   }
 
   /**
-   The numbers CallKit holds for this extension. When nothing has been recorded
-   yet, the blocking list itself is the best answer: an entry that is already
-   there cannot be added again — CallKit answers `UNIQUE constraint failed:
-   PhoneNumberBlockingEntry`, which only happens when the row exists.
+   The numbers CallKit holds for this extension.
+
+   When nothing has been recorded, the extension has never handed CallKit a
+   list, so CallKit holds nothing for it and an incremental request must state
+   the whole list. The old answer here — "assume CallKit already holds the
+   blocking list" — is how a fresh install came to report "loaded N" while
+   actually adding none of the entries, and to stay that way on every later
+   reload, because each diff against the assumed baseline was empty.
+
+   A load record *without* a loaded record predates the loaded record itself
+   (an older build): there CallKit may genuinely hold rows already, so the
+   blocking list stays the best available answer — re-adding an existing entry
+   is an error, not a no-op.
    */
   public func readLoaded() -> [Int64] {
     guard let json = defaults.string(forKey: Self.loadedKey),
           let strings = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
-      return readNumbers()
+      return readLoad() == nil ? [] : readNumbers()
     }
     return Array(Set(strings.compactMap { Int64($0) })).sorted()
   }

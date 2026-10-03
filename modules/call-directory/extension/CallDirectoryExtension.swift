@@ -8,8 +8,13 @@ import Foundation
  already wrote to the App Group store: no matching happens here, because the
  Numbers are the Effective block list the app compiled from the Rules.
 
- Two rules govern everything below, both learned the hard way:
+ Three rules govern everything below, all learned the hard way:
 
+ - Entries are added synchronously inside `beginRequest`, then the request is
+   completed. CallKit gives a request one time budget, and work handed to
+   another queue after this method returns is how a load expires without an
+   error; every working implementation found adds and completes in one pass
+   (docs/research/ios-call-blocking.md §2, §3c).
  - An incremental request must state the *difference* against what was loaded
    last time, so the extension keeps that list. `removeAllBlockingEntries()` is
    never used: the deletion it performs is the statement CallKit is reported to
@@ -20,10 +25,6 @@ import Foundation
    tells the app.
  */
 public final class CallDirectoryExtension: CXCallDirectoryProvider {
-  private static let chunkSize = 10_000
-
-  private let queue = DispatchQueue(label: "com.callblocker.call-directory.extension", qos: .userInitiated)
-
   public override func beginRequest(with context: CXCallDirectoryExtensionContext) {
     // The delegate is how CallKit reports a refused load (out-of-order entries,
     // duplicates, too many entries). Without it those failures are invisible.
@@ -47,71 +48,15 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
     let additions = context.isIncremental ? wanted.filter { !previousSet.contains($0) } : wanted
     let removals = context.isIncremental ? previous.filter { !wantedSet.contains($0) } : []
 
-    queue.async {
-      self.apply(
-        additions: additions,
-        removals: removals,
-        wanted: wanted,
-        from: 0,
-        to: context,
-        store: store,
-        startedAt: startedAt
-      )
+    // The store and the loaded record are both ascending, so additions and
+    // removals are too, which is what the sequential-entry contract requires.
+    for number in additions {
+      context.addBlockingEntry(withNextSequentialPhoneNumber: CXCallDirectoryPhoneNumber(number))
     }
-  }
+    for number in removals {
+      context.removeBlockingEntry(withPhoneNumber: CXCallDirectoryPhoneNumber(number))
+    }
 
-  /**
-   Adds the new numbers in ascending order, a chunk per pass, then removes the
-   ones that went away.
-   */
-  private func apply(
-    additions: [Int64],
-    removals: [Int64],
-    wanted: [Int64],
-    from index: Int,
-    to context: CXCallDirectoryExtensionContext,
-    store: CallDirectoryStore,
-    startedAt: String
-  ) {
-    let end = min(index + Self.chunkSize, additions.count)
-    var position = index
-    while position < end {
-      context.addBlockingEntry(withNextSequentialPhoneNumber: CXCallDirectoryPhoneNumber(additions[position]))
-      position += 1
-    }
-    guard end < additions.count else {
-      for number in removals {
-        context.removeBlockingEntry(withPhoneNumber: CXCallDirectoryPhoneNumber(number))
-      }
-      complete(context: context, store: store, startedAt: startedAt, entries: wanted.count, wanted: wanted)
-      return
-    }
-    queue.async {
-      self.apply(
-        additions: additions,
-        removals: removals,
-        wanted: wanted,
-        from: end,
-        to: context,
-        store: store,
-        startedAt: startedAt
-      )
-    }
-  }
-
-  /**
-   Finishes the request and records whether the system expired it first. An
-   expired request means none of the added entries took effect, in which case the
-   previously loaded list is still what the system holds and must not be
-   overwritten with what we tried to send.
-   */
-  private func complete(
-    context: CXCallDirectoryExtensionContext,
-    store: CallDirectoryStore,
-    startedAt: String,
-    entries: Int,
-    wanted: [Int64]
-  ) {
     let incremental = context.isIncremental
     context.completeRequest { expired in
       if !expired {
@@ -120,7 +65,7 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
       store.writeLoad(CallDirectoryLoad(
         startedAt: startedAt,
         finishedAt: Self.stamp(),
-        entries: entries,
+        entries: wanted.count,
         incremental: incremental,
         failure: expired ? "The system expired the request, so none of the entries were applied." : nil
       ))
