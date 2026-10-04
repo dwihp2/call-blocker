@@ -16,9 +16,16 @@ import Foundation
    error; every working implementation found adds and completes in one pass
    (docs/research/ios-call-blocking.md §2, §3c).
  - An incremental request must state the *difference* against what was loaded
-   last time, so the extension keeps that list. `removeAllBlockingEntries()` is
-   never used: the deletion it performs is the statement CallKit is reported to
-   fail on, and it removes the very entries this extension depends on.
+   last time, so the extension keeps that list.
+ - When the extension cannot know what CallKit holds (no load was ever
+   recorded) or the last load was refused, it restates from zero:
+   `removeAllBlockingEntries()` then the whole list. That delete is the only
+   way out of the deadlock a device like the §5.6 one lands in — CallKit's
+   database keeps rows the extension never recorded, so adds collide with a
+   `UNIQUE constraint failed` while the lookups still say the number is not
+   blocked. On healthy devices the delete is a no-op on a fresh install, and
+   after a refused load it replaces whatever CallKit half-applied. It is never
+   issued on the ordinary delta path.
  - Every load is recorded in the App Group — started, finished, entries, and any
    failure or expiry — because a Call Directory extension fails silently
    otherwise: a request that expires discards every entry it added, and nothing
@@ -33,6 +40,7 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
     let store = CallDirectoryStore(appGroup: Self.appGroup)
     let wanted = store.readNumbers()
     let previous = store.readLoaded()
+    let lastLoad = store.readLoad()
     let startedAt = Self.stamp()
     store.writeLoad(CallDirectoryLoad(
       startedAt: startedAt,
@@ -41,12 +49,26 @@ public final class CallDirectoryExtension: CXCallDirectoryProvider {
       incremental: context.isIncremental
     ))
 
+    // When the extension cannot know what CallKit holds — no load was ever
+    // recorded — or the last load was refused, a delta can only collide or be
+    // incomplete: CallKit's database can keep rows this extension never
+    // recorded (a previous install's entries surviving its uninstall, rows
+    // left by a refused load). Restating from zero is the only self-healing
+    // move: removeAll, then add the whole wanted list. On a healthy fresh
+    // install removeAll is a no-op and the adds are the whole list either way;
+    // after a refused load it replaces whatever CallKit half-applied.
+    let restateFromZero = !store.hasLoadedRecord() || lastLoad?.failure != nil
+    if restateFromZero {
+      context.removeAllBlockingEntries()
+    }
+
     let wantedSet = Set(wanted)
     let previousSet = Set(previous)
     // A full request states the whole list; an incremental one states only what
-    // changed, so compute the difference rather than re-stating everything.
-    let additions = context.isIncremental ? wanted.filter { !previousSet.contains($0) } : wanted
-    let removals = context.isIncremental ? previous.filter { !wantedSet.contains($0) } : []
+    // changed, so compute the difference rather than re-stating everything —
+    // except when restating from zero, where the whole list is the difference.
+    let additions = restateFromZero || !context.isIncremental ? wanted : wanted.filter { !previousSet.contains($0) }
+    let removals = !restateFromZero && context.isIncremental ? previous.filter { !wantedSet.contains($0) } : []
 
     // The store and the loaded record are both ascending, so additions and
     // removals are too, which is what the sequential-entry contract requires.

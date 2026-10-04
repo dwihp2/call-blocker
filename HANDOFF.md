@@ -2,7 +2,7 @@
 
 Written 2026-10-03; **updated the same evening**, after the delta-baseline fix landed and the device fault was proven with a positive insert; **re-checked 2026-10-04** (§5.7). The repo is `/Users/dwihp2/dev/call-blocker`. Read `CONTEXT.md` for the vocabulary, `docs/adr/` for the decisions, and `docs/research/ios-call-blocking.md` for the iOS investigation — this file is the map between them and the current state.
 
-**The one-line status:** the app is built, its last silent failure mode is fixed and verified on the device; iOS call blocking on this iPhone 15 still does not work — the OS acknowledges storing our blocking entries and then fails to find them when a call arrives (`isHandleBlocked → false`, §5.6). That is the device fault described in §5.3, not the code. Remaining levers for the device: a full reboot, then *Reset All Settings* (§8). The phone now runs iOS 27.0.1 (24A446); the person reports the registered caller still rings (§5.7).
+**The one-line status:** the app is built, its last silent failure mode is fixed and verified on the device; iOS call blocking on this iPhone 15 still does not work — the OS acknowledges storing our blocking entries and then fails to find them when a call arrives (`isHandleBlocked → false`, §5.6). That is the device fault described in §5.3, not the code. Remaining levers for the device: a full reboot, then *Reset All Settings* (§8). The phone now runs iOS 27.0.1 (24A446). On 2026-10-04 the reinstall exposed a second, concrete symptom — **stale rows surviving the uninstall, inserts colliding** (`UNIQUE constraint failed`) — and **0.1.3 (4) repairs that deadlock in-app** (§5.8): the caller's number is loaded cleanly again. The pending test call decides between "blocking recovered" and *Reset All Settings*.
 
 ---
 
@@ -85,7 +85,7 @@ The `readLoaded()` fallback in `RuleEngine.swift` — "if no baseline is recorde
 ### 5.5 What the investigation fixed in the product
 
 - Capacity 1,000,000 → **25,000**, measured.
-- The extension sends **deltas** and never calls `removeAllBlockingEntries()` — that delete is the statement CallKit is reported to fail on, and re-adding rows CallKit already holds is an error, not a no-op. When **no baseline is recorded**, it now states the whole list instead of assuming (§5.4).
+- The extension sends **deltas**; `removeAllBlockingEntries()` is issued only when it must **restate from zero** — no load was ever recorded, or the last load was refused. Both are states where CallKit can hold rows the extension never recorded, and 2026-10-04 proved it happens (§5.8): a previous install's rows survived its uninstall and every add then died on `UNIQUE constraint failed`. The restate cleared that deadlock. On the ordinary delta path the delete is still never issued. When **no baseline is recorded**, the whole list is stated instead of assumed (§5.4).
 - Entries are added **synchronously** inside `beginRequest`, completing in one pass — the shape every working implementation uses.
 - **Reloads are coalesced**: one at a time, with a trailing reload if writes landed while one ran.
 - Every load is recorded in the App Group (`startedAt`, `finishedAt`, `entries`, `failure`) and every reload records its error, so **Protection status tells the truth**: whether the extension ran, and CallKit's own words when it refused.
@@ -133,17 +133,31 @@ The app side was re-verified from the device itself, not from the repo: the App 
 
 A fresh `pymobiledevice3 syslog collect` for today's `shouldBlock` verdict could not be completed: the archive download ran over the local-network tunnel and dropped twice (~9 minutes in, "Connection was terminated abruptly"; the partial archive was empty). With the phone on USB the same recipe from §9 will produce the verdict; the App Group records above do not depend on it.
 
+### 5.8 Second round, 2026-10-04 — the stale-rows deadlock, found and repaired in-app
+
+After the person uninstalled the app, we rebuilt as **0.1.2 (3)** and installed it. What the device records then showed, in order:
+
+1. First launch: the extension loaded **0 entries** cleanly.
+2. The person registered the caller's number `+62 851 1737 3483` as a single-number Block rule. The app synced; the extension ran; CallKit **refused the insert**: `sqlite3_step for query 'INSERT INTO PhoneNumberBlockingEntry …' returned 19 (2067) … UNIQUE constraint failed: PhoneNumberBlockingEntry.extension_id, PhoneNumberBlockingEntry.phone_number_id`.
+3. That collision means **CallKit's database still held the row from the pre-uninstall install — the uninstall did not purge it** — while the call-time lookups (§5.3) still say the number is not blocked. And because the fresh App Group had no baseline, every retry would have hit the same collision forever. Rows survive, inserts collide, lookups miss: the fault in one sentence.
+
+**Repair, built as 0.1.3 (4):** when no load was ever recorded, or the last load was refused, the extension restates from zero — `removeAllBlockingEntries()` then the whole list. On this device the **delete was accepted**: the re-add completed, `load.json` and `reload.json` record no failure, and `loaded.json` now holds the number. The extension can now recover from this deadlock on its own instead of showing a refusal forever.
+
+What this does not yet prove: that a freshly-restated row is found by the lookup at call time. That is the pending test call. If it still rings, the lookup fault is independent of row freshness and *Reset All Settings* is the last lever (§8.2c).
+
 ## 6. Phone and simulator state
 
 - **iPhone 15, iOS 27.0.1 (24A446)** (updated from 27.0/24A437 after the 2026-10-03 session), team `6NN3PT736K` — a **free Personal Team**: 7-day provisioning profiles (currently expiring 2026-10-07) and one device. Free is enough for development; a paid membership is needed for other people's devices, TestFlight, the App Store, or Live Caller ID Lookup.
 - Bundle ids: `com.dwihp2.call-blocker` (iOS), `com.dwihp2.callblocker` (Android — no hyphen; illegal in a Java package). App Group `group.com.dwihp2.call-blocker`.
-- The app on the phone is **0.1.2 (3)** — rebuilt 2026-10-04 with a bumped version (app.json 0.1.2, build 3) after the person uninstalled the app, the §8.2b recovery step. Fresh install: the developer profile was re-trusted (launch succeeds) and the first launch's sync **ran the extension** — load record `2026-10-04T06:06:34Z`, 0 entries, no failure — so the extension's enable state survived the reinstall (or was re-enabled). **No Rules are registered yet** (the uninstall wiped the app container and the App Group store), which is why nothing is blocked; re-register the interval Rule `+62 851 1737 3480 – …3489` and turn Blocking on.
+- The app on the phone is **0.1.3 (4)** — upgraded in place from 0.1.2 (3), so the registered Rule survived the upgrade. It holds one single-number Block rule for the caller `+62 851 1737 3483`, loaded cleanly at `2026-10-04T06:15:03Z` — `loaded.json` records the number and no failure, the §5.8 repair's outcome. Awaiting the test call.
 - A simulator (iPhone 15, iOS 17 runtime) is used for UI work; the app runs there headless and can be driven by writing `Documents/call-blocker/tour.txt` and relaunching (a temporary hook is needed for that; it was removed).
 - Device tooling that works today: `xcrun devicectl` (install, launch, screenshot, file copy from app/app-group containers, crash logs, **process terminate**), `pymobiledevice3` (installed via `uv tool install`, at `~/.local/bin/pymobiledevice3` — `syslog live`, `syslog collect`), and `idevicecrashreport`. `idevicesyslog` does **not** attach on iOS 27 — do not use it. Everything here works over USB **without root**.
 
 ## 7. Tree state
 
 The uncommitted work from the evening session landed in commit `49e61b4` (2026-10-03 21:19): `RuleEngine.swift` (the `readLoaded()` fix, §5.4), `CallDirectoryExtension.swift` (synchronous adds inside `beginRequest`), `CallDirectoryModule.swift` (coalesced reloads), `apps/mobile/app.json` (0.1.1 (2)), and the doc updates. Nothing from that session remains uncommitted.
+
+The 2026-10-04 stale-rows repair (§5.8) lands with this file: `RuleEngine.swift` (`hasLoadedRecord()`), `CallDirectoryExtension.swift` (restate-from-zero), `apps/mobile/app.json` (0.1.3, build 4).
 
 What remains is the accidental root project from running `expo run:ios` at the repo root instead of in `apps/mobile`: top-level `app.json`, `ios/` and `tsconfig.json` (untracked), a stray 29-byte `-` file holding a device UDID (untracked), and `expo`/`react`/`react-native` added to the root `package.json` + `package-lock.json` (modified). It builds a stub app that iOS kills on launch. Delete the four stray paths and revert the root `package.json`/`package-lock.json` when convenient.
 
@@ -198,7 +212,7 @@ What remains is the accidental root project from running `expo run:ios` at the r
 ## 11. Task list — what remains (as of 2026-10-04)
 
 **Device / verification**
-- [ ] **Recover the iOS test device** (§8.2): the full-reboot lever is spent — the 27.0.1 update rebooted the phone and the caller still rings (reported; log unverified, §5.7). **Uninstall → reinstall is done**: the person uninstalled, we rebuilt as **0.1.2 (3)** and installed it (2026-10-04); the profile is re-trusted and the extension ran on first launch (0 entries, §6). Remaining on the phone: **re-register the interval Rule** `+62 851 1737 3480 – …3489`, turn Blocking on, confirm the extension is on in Settings › Phone, then one test call. If still `NO`, *Reset All Settings* → re-trust → re-enable → test. Verify from an archive (`pymobiledevice3 syslog collect`, §9, phone on USB) — success is `VoicemailReason::BlockedCall` and no ring.
+- [ ] **Recover the iOS test device** (§8.2): the full-reboot lever is spent (27.0.1 update; still rings per report). Uninstall → reinstall exposed the **stale-rows deadlock**, repaired in-app by **0.1.3 (4)** (§5.8): the caller's number is registered and loaded cleanly. **The one remaining step is the test call.** Blocked → tick this item and the E2E proof. Still rings → *Reset All Settings* → re-trust → re-enable → test. Verify from an archive (`pymobiledevice3 syslog collect`, §9, phone on USB) — success is `VoicemailReason::BlockedCall` and no ring.
 - [ ] **Prove blocking end-to-end once** on any healthy iPhone (the app has never been seen actually blocking a call — the code is verified only up to CallKit acknowledging the inserts, §5.6).
 - [ ] Re-measure the entry ceiling with the **synchronous** add (§10) once a healthy device is available — 25,000 vs 50,000.
 

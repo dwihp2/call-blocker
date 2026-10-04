@@ -611,6 +611,18 @@ public struct CallDirectoryStore {
   }
 
   /**
+   Whether the extension ever recorded a successful load. `readLoaded` alone
+   cannot say it: an empty loaded list and a never-written one both read as
+   `[]`. Without this, the extension cannot tell "CallKit holds nothing"
+   from "we have no idea what CallKit holds" — and the second one is exactly
+   when a delta can collide with rows it never recorded (a previous install's
+   entries surviving its uninstall, or rows left behind by a refused load).
+   */
+  public func hasLoadedRecord() -> Bool {
+    return defaults.string(forKey: Self.loadedKey) != nil
+  }
+
+  /**
    What the app's last reload request came back with. The extension's own report
    says whether it ran; this says whether CallKit even accepted the request, and
    the two together are the only way to tell "never asked" from "asked and
