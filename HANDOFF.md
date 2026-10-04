@@ -1,8 +1,8 @@
 # Call Blocker — handoff
 
-Written 2026-10-03; **updated the same evening**, after the delta-baseline fix landed and the device fault was proven with a positive insert. The repo is `/Users/dwihp2/dev/call-blocker`. Read `CONTEXT.md` for the vocabulary, `docs/adr/` for the decisions, and `docs/research/ios-call-blocking.md` for the iOS investigation — this file is the map between them and the current state.
+Written 2026-10-03; **updated the same evening**, after the delta-baseline fix landed and the device fault was proven with a positive insert; **re-checked 2026-10-04** (§5.7). The repo is `/Users/dwihp2/dev/call-blocker`. Read `CONTEXT.md` for the vocabulary, `docs/adr/` for the decisions, and `docs/research/ios-call-blocking.md` for the iOS investigation — this file is the map between them and the current state.
 
-**The one-line status:** the app is built, its last silent failure mode is fixed and verified on the device; iOS call blocking on this iPhone 15 still does not work — the OS acknowledges storing our blocking entries and then fails to find them when a call arrives (`isHandleBlocked → false`, §5.6). That is the device fault described in §5.3, not the code. Remaining levers for the device: a full reboot, then *Reset All Settings* (§8).
+**The one-line status:** the app is built, its last silent failure mode is fixed and verified on the device; iOS call blocking on this iPhone 15 still does not work — the OS acknowledges storing our blocking entries and then fails to find them when a call arrives (`isHandleBlocked → false`, §5.6). That is the device fault described in §5.3, not the code. Remaining levers for the device: a full reboot, then *Reset All Settings* (§8). The phone now runs iOS 27.0.1 (24A446); the person reports the registered caller still rings (§5.7).
 
 ---
 
@@ -125,25 +125,27 @@ Test device: iPhone 15, iOS 27.0 (24A437), developer profile trusted, extension 
 
 **Conclusion:** the app does its job — CallKit says it inserted the entries — and iOS 27 on this device fails to find them at call time. Device fault of the FB20986470 class; no app change can fix it.
 
+### 5.7 Re-check on 2026-10-04 — same fault on iOS 27.0.1; app side re-verified on the device
+
+The phone was updated to **iOS 27.0.1 (24A446)** after the evening session (an OS update, so it included a full reboot — the first lever in §8.2). The person reports the same registered caller `+62 851 1737 3483` **still rings**.
+
+The app side was re-verified from the device itself, not from the repo: the App Group store still holds the interval's 10 numbers, and the extension's own records are clean — `load.json` finished (`incremental`, no failure), `reload.json` with an empty error, `loaded.json` holding the same 10 numbers. Nothing changed on the app side, and the fault is unchanged after the update.
+
+A fresh `pymobiledevice3 syslog collect` for today's `shouldBlock` verdict could not be completed: the archive download ran over the local-network tunnel and dropped twice (~9 minutes in, "Connection was terminated abruptly"; the partial archive was empty). With the phone on USB the same recipe from §9 will produce the verdict; the App Group records above do not depend on it.
+
 ## 6. Phone and simulator state
 
-- **iPhone 15, iOS 27.0 (24A437)**, team `6NN3PT736K` — a **free Personal Team**: 7-day provisioning profiles (currently expiring 2026-10-07) and one device. Free is enough for development; a paid membership is needed for other people's devices, TestFlight, the App Store, or Live Caller ID Lookup.
+- **iPhone 15, iOS 27.0.1 (24A446)** (updated from 27.0/24A437 after the 2026-10-03 session), team `6NN3PT736K` — a **free Personal Team**: 7-day provisioning profiles (currently expiring 2026-10-07) and one device. Free is enough for development; a paid membership is needed for other people's devices, TestFlight, the App Store, or Live Caller ID Lookup.
 - Bundle ids: `com.dwihp2.call-blocker` (iOS), `com.dwihp2.callblocker` (Android — no hyphen; illegal in a Java package). App Group `group.com.dwihp2.call-blocker`.
 - The app on the phone is **0.1.1 (2)** (Settings shows "App version 0.1.1"), extension enabled, holding one interval Rule `+62 851 1737 3480 – …3489`. Developer profile was re-trusted after the last reinstall.
 - A simulator (iPhone 15, iOS 17 runtime) is used for UI work; the app runs there headless and can be driven by writing `Documents/call-blocker/tour.txt` and relaunching (a temporary hook is needed for that; it was removed).
 - Device tooling that works today: `xcrun devicectl` (install, launch, screenshot, file copy from app/app-group containers, crash logs, **process terminate**), `pymobiledevice3` (installed via `uv tool install`, at `~/.local/bin/pymobiledevice3` — `syslog live`, `syslog collect`), and `idevicecrashreport`. `idevicesyslog` does **not** attach on iOS 27 — do not use it. Everything here works over USB **without root**.
 
-## 7. Uncommitted work in the tree
+## 7. Tree state
 
-`git status` is dirty; **review and commit rather than revert**:
+The uncommitted work from the evening session landed in commit `49e61b4` (2026-10-03 21:19): `RuleEngine.swift` (the `readLoaded()` fix, §5.4), `CallDirectoryExtension.swift` (synchronous adds inside `beginRequest`), `CallDirectoryModule.swift` (coalesced reloads), `apps/mobile/app.json` (0.1.1 (2)), and the doc updates. Nothing from that session remains uncommitted.
 
-- `RuleEngine.swift` — the `readLoaded()` fix (§5.4) — **verified on device**.
-- `CallDirectoryExtension.swift` — synchronous adds inside `beginRequest`.
-- `CallDirectoryModule.swift` — coalesced reloads.
-- `apps/mobile/app.json` — version 0.1.1, build 2.
-- `README.md`, `docs/adr/0004` (Capacity 25,000), `docs/research/ios-call-blocking.md` (§3d external record, §6.7 delta-baseline, §7 notes).
-
-The repo root is also polluted by an accidental project: `app.json`, `ios/` and `tsconfig.json` at the top level plus `expo`/`react`/`react-native` in the root `package.json`, all from running `expo run:ios` at the repo root instead of in `apps/mobile`. It builds a stub app that iOS kills on launch. Delete those three paths and revert the root `package.json` when convenient.
+What remains is the accidental root project from running `expo run:ios` at the repo root instead of in `apps/mobile`: top-level `app.json`, `ios/` and `tsconfig.json` (untracked), a stray 29-byte `-` file holding a device UDID (untracked), and `expo`/`react`/`react-native` added to the root `package.json` + `package-lock.json` (modified). It builds a stub app that iOS kills on launch. Delete the four stray paths and revert the root `package.json`/`package-lock.json` when convenient.
 
 ## 8. Next steps, in order of value
 
@@ -153,7 +155,7 @@ The repo root is also polluted by an accidental project: `app.json`, `ios/` and 
    b. Uninstall the app → **reboot** → reinstall → enable the extension → one test call.
    c. **Reset All Settings** (Settings → General → Transfer or Reset iPhone → Reset → Reset All Settings). Per Apple (`support.apple.com/en-us/126643`) this clears Wi-Fi networks/passwords, Bluetooth pairings, Apple Watch pairings, Apple Pay cards, Face ID/Touch ID setup, VPN, notification/privacy/accessibility/display settings, keyboard dictionary, home-screen layout — and **no** photos, messages, contacts, apps or app data. Afterwards: re-trust the developer profile, re-enable the extension, test again. It is the only *reported* recovery for this fault.
 3. ~~Re-verify the delta path on a fresh install~~ — done (§5.6): CallKit logged the adds on a fresh install under the fixed `readLoaded`.
-4. Commit the work in §7; clean up the stray root project.
+4. ~~Commit the work in §7~~ — done in `49e61b4`; clean up the stray root project.
 5. Product follow-ups worth doing: show the *load* state on the Rules screen (not only in Protection); consider a Protection note for the "loaded cleanly but the system still rings" state; restore a narrow prefix Rule for the test device once the cap allows it.
 
 ## 9. Gotchas the next session will hit
@@ -189,20 +191,20 @@ The repo root is also polluted by an accidental project: `app.json`, `ios/` and 
 
 ## 10. Open questions
 
-- Does *Reset All Settings* actually restore blocking on the test device? (Reported by forum users; not yet seen here.) Does a plain reboot?
+- Does *Reset All Settings* actually restore blocking on the test device? (Reported by forum users; not yet seen here.) A plain reboot did not — the 27.0.1 update rebooted the phone and the caller still rings (§5.7, per the person's report).
 - If iOS blocking cannot be relied on for a given person's device, what should the app say? Today Protection status can truthfully report "loaded N numbers" while the system still rings — a "this phone is not blocking calls" state is not modelled yet.
 - Is the synchronous add enough to make loads reliable at the top of the 25,000 ceiling, or is 50,000 where it really breaks? The measurement was taken with the asynchronous, chunked add.
 
-## 11. Task list — what remains (as of 2026-10-03)
+## 11. Task list — what remains (as of 2026-10-04)
 
 **Device / verification**
-- [ ] **Recover the iOS test device** (§8.2): full reboot → one test call; if still `shouldBlock: NO`, uninstall → reboot → reinstall → enable → test; if still `NO`, *Reset All Settings* → re-trust the developer profile → re-enable the extension → test. Verify from an archive (`pymobiledevice3 syslog collect`, §9) — success is `VoicemailReason::BlockedCall` and no ring.
+- [ ] **Recover the iOS test device** (§8.2): the full-reboot lever is spent — the 27.0.1 update rebooted the phone and the caller still rings (reported; log unverified, §5.7). Next: uninstall → reboot → reinstall → enable → test; if still `NO`, *Reset All Settings* → re-trust the developer profile → re-enable the extension → test. Verify from an archive (`pymobiledevice3 syslog collect`, §9, phone on USB) — success is `VoicemailReason::BlockedCall` and no ring.
 - [ ] **Prove blocking end-to-end once** on any healthy iPhone (the app has never been seen actually blocking a call — the code is verified only up to CallKit acknowledging the inserts, §5.6).
 - [ ] Re-measure the entry ceiling with the **synchronous** add (§10) once a healthy device is available — 25,000 vs 50,000.
 
 **Repo**
-- [ ] **Commit the uncommitted work** (§7) — review, then commit (or ask the user; nothing is staged).
-- [ ] **Clean the stray root project**: delete top-level `app.json`, `ios/`, `tsconfig.json`; revert the root `package.json` deps (`expo`, `react`, `react-native`). It only builds a stub that iOS kills on launch.
+- [x] **Commit the uncommitted work** — done in `49e61b4` (2026-10-03 21:19).
+- [ ] **Clean the stray root project**: delete top-level `app.json`, `ios/`, `tsconfig.json` and the stray `-` file (a UDID); revert the root `package.json`/`package-lock.json` deps (`expo`, `react`, `react-native`). It only builds a stub that iOS kills on launch.
 - [ ] Free Personal Team profile expires **2026-10-07** — a device build after that needs `-allowProvisioningUpdates` and re-trusting.
 
 **Product**
