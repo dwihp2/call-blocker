@@ -146,6 +146,8 @@ Two of the failure modes are now **Apple DTS-confirmed platform precedence**, no
 
 The testing rule that falls out of this: **never call the number from the device under test, and do not keep it in Contacts** — or delete the Recents entry / remove the contact first. Otherwise a correctly loaded blocking entry is out-ranked by design. For us there is a second consequence: an identification entry for a number we also block — left over from the §4c experiment, or written by another app installed on the same phone — may itself be why a blocking entry does not apply.
 
+**Observed on the test device, 2026-10-05.** With only Call Blocker enabled (extension enabled, entries loaded cleanly — `Performed initial deletion` + `Added N` each time) the device produced its **first confirmed third-party block**: `VoicemailReason::BlockedCall` at 14:29:50. Five calls across the next two hours rang — `shouldBlock: NO` every time — while the number's Recents held records, and the person reports blocking resumed after clearing the call history. The earlier measurements (§4c, §5.6), taken before this rule entered the test protocol, are consistent with the rule rather than with a device fault. One trap for the next observer: `shouldBlock: NO shouldSilence: YES` is a **silenced** call (Silence Unknown Callers, Focus) — it does not ring, which looks like a block from the outside, but only `VoicemailReason::BlockedCall` proves a blocking entry applied.
+
 The broader regression reports, oldest first:
 
 | When | Thread | What it reports |

@@ -12,6 +12,9 @@ packages/core        parsing, Backup file, contract types (TypeScript)
 modules/call-directory   iOS: Swift engine, Call Directory extension, config plugin
 modules/call-screening   Android: Kotlin engine, CallScreeningService
 fixtures/matching.json   the matching contract, run by both native engines
+docs/adr                 the decisions
+docs/research            the iOS investigation
+docs/ios-lifecycle.md    the iOS pipeline: how a Rule becomes a settled blocking entry
 ```
 
 ## Requirements
@@ -69,8 +72,8 @@ Work down this list; each step is something the app can tell you or something yo
 2. **The extension must be on** in Settings > Phone > Call Blocking & Identification. Every reinstall turns it off, and iOS offers no API to switch it on.
 3. **Sync failures are shown, not swallowed**: Protection reports "Written, but CallKit would not reload it: …" with CallKit's own words.
 4. **The list must be small** (see Capacity above). A Rule that expands past it is refused at Registration with the count that would be needed.
-5. **A number saved in Contacts, or called from this iPhone, out-ranks the app's blocking entry**: iOS 18+/26 platform precedence, DTS-confirmed (forums 763423, 763803 and 800415). Remove the contact, delete that call from the Phone app's Recents, then try again — and never call a number from the device under test. `docs/research/ios-call-blocking.md` §3d.
-6. **If the extension loads cleanly and calls still ring**, the device itself is broken, not the app. `docs/research/ios-call-blocking.md` §4c documents a device where iOS stored the blocking entries, honoured an identification entry written in the same request, and ignored the blocking entry — while its own block list worked. Apple's forums describe the same class of failure (FB20986470) with no fix released; the only reported recovery is *Reset All Settings*.
+5. **A number saved in Contacts, or with any record in Recents — most of all an outgoing call made from this iPhone — out-ranks the app's blocking entry**: iOS 18+/26 platform precedence, DTS-confirmed (forums 763423, 763803 and 800415). On the test device (2026-10-05) calls rang while the number's Recents held records, and blocking resumed after the history was cleared. Remove the contact, delete every Recents entry for the number, and never call a number from the device under test. `docs/research/ios-call-blocking.md` §3d, `docs/ios-lifecycle.md` §2.
+6. **Only if steps 1–5 all check out and calls still ring**, treat the shared blocking database as the last suspect — Apple's forums describe a device-wide failure class (FB20986470, `docs/research/ios-call-blocking.md` §4c) whose only reported recovery is *Reset All Settings*. Check step 5 first and properly (every Recents entry deleted, no contact): those forum reports read differently once precedence is out of the way.
 
 ### Changing the extension's Swift is a build trap
 
