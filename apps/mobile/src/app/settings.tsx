@@ -223,6 +223,16 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
+      <Section title="How it works">
+        <Card>
+          <NavRow
+            label="How blocking works"
+            detail="From a Rule to a blocked call, in plain words."
+            onPress={() => router.push('/how-it-works')}
+          />
+        </Card>
+      </Section>
+
       <Section title="Protection and backup">
         <Card>
           <NavRow
