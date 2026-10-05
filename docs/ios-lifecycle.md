@@ -79,7 +79,12 @@ none of our code ever sees a phone number that is calling.
   - **Identification entries**: an identification entry for the same number can
     conflict with a blocking entry (Apple DTS describes it as an edge case they
     are not certain about). Other apps write identification entries into the
-    same shared database.
+    same shared database. Watch for stale labels: on the test device a
+    `Call Blocker: Blocked` label sat on Recents calls this app never blocked —
+    a leftover identification entry from the 2026-10-02/03 experiment build,
+    not current code (no identification-entry load from this app appears in any
+    archive; the only large identification loads were neighbours' — 10,000 +
+    10,000 + 4,005 entries in one request at 14:45).
   - **The database is shared and is not a clean room**: uninstalling an app
     does not delete its rows (measured: `UNIQUE constraint failed` when
     re-adding a number after a reinstall), and disabling an app leaves its rows
