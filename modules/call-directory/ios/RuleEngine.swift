@@ -503,15 +503,13 @@ public struct CallDirectoryLoad {
   public let startedAt: String
   public let finishedAt: String?
   public let entries: Int
-  public let incremental: Bool
   /** What CallKit said when it refused the load, if it did. */
   public let failure: String?
 
-  public init(startedAt: String, finishedAt: String?, entries: Int, incremental: Bool, failure: String? = nil) {
+  public init(startedAt: String, finishedAt: String?, entries: Int, failure: String? = nil) {
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.entries = entries
-    self.incremental = incremental
     self.failure = failure
   }
 }
@@ -576,50 +574,17 @@ public struct CallDirectoryStore {
   }
 
   /**
-   The numbers this extension last handed to CallKit. Incremental requests must
-   say what changed, not re-state everything, so the difference against this list
-   is the whole request.
+   The numbers the extension last handed to CallKit. It is a record of what the
+   last successful load stated, for the app and for debugging; nothing diffs
+   against it. The extension states the whole list on every request, because a
+   request that never reads `isIncremental` is a complete request: the system
+   replaces the extension's entries with the ones added and needs no baseline.
    */
   public func writeLoaded(_ numbers: [Int64]) {
     guard let data = try? JSONEncoder().encode(numbers.map(String.init)) else {
       return
     }
     defaults.set(String(decoding: data, as: UTF8.self), forKey: Self.loadedKey)
-  }
-
-  /**
-   The numbers CallKit holds for this extension.
-
-   When nothing has been recorded, the extension has never handed CallKit a
-   list, so CallKit holds nothing for it and an incremental request must state
-   the whole list. The old answer here — "assume CallKit already holds the
-   blocking list" — is how a fresh install came to report "loaded N" while
-   actually adding none of the entries, and to stay that way on every later
-   reload, because each diff against the assumed baseline was empty.
-
-   A load record *without* a loaded record predates the loaded record itself
-   (an older build): there CallKit may genuinely hold rows already, so the
-   blocking list stays the best available answer — re-adding an existing entry
-   is an error, not a no-op.
-   */
-  public func readLoaded() -> [Int64] {
-    guard let json = defaults.string(forKey: Self.loadedKey),
-          let strings = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
-      return readLoad() == nil ? [] : readNumbers()
-    }
-    return Array(Set(strings.compactMap { Int64($0) })).sorted()
-  }
-
-  /**
-   Whether the extension ever recorded a successful load. `readLoaded` alone
-   cannot say it: an empty loaded list and a never-written one both read as
-   `[]`. Without this, the extension cannot tell "CallKit holds nothing"
-   from "we have no idea what CallKit holds" — and the second one is exactly
-   when a delta can collide with rows it never recorded (a previous install's
-   entries surviving its uninstall, or rows left behind by a refused load).
-   */
-  public func hasLoadedRecord() -> Bool {
-    return defaults.string(forKey: Self.loadedKey) != nil
   }
 
   /**
@@ -650,7 +615,6 @@ public struct CallDirectoryStore {
       "startedAt": load.startedAt,
       "finishedAt": load.finishedAt ?? "",
       "entries": load.entries,
-      "incremental": load.incremental,
       "failure": load.failure ?? ""
     ]
     guard let data = try? JSONSerialization.data(withJSONObject: object) else {
@@ -670,7 +634,6 @@ public struct CallDirectoryStore {
       startedAt: object["startedAt"] as? String ?? "",
       finishedAt: finished.isEmpty ? nil : finished,
       entries: object["entries"] as? Int ?? 0,
-      incremental: object["incremental"] as? Bool ?? false,
       failure: failure.isEmpty ? nil : failure
     )
   }

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Call Blocker",
     "slug": "call-blocker",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "callblocker",
@@ -10,7 +10,7 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.dwihp2.call-blocker",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "appleTeamId": "6NN3PT736K",
       "supportsTablet": false
     },

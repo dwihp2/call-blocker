@@ -2,7 +2,7 @@
 
 Written 2026-10-03; **updated the same evening**, after the delta-baseline fix landed and the device fault was proven with a positive insert; **re-checked 2026-10-04** (§5.7). The repo is `/Users/dwihp2/dev/call-blocker`. Read `CONTEXT.md` for the vocabulary, `docs/adr/` for the decisions, and `docs/research/ios-call-blocking.md` for the iOS investigation — this file is the map between them and the current state.
 
-**The one-line status:** the app is built, its last silent failure mode is fixed and verified on the device; iOS call blocking on this iPhone 15 still does not work — the OS acknowledges storing our blocking entries and then fails to find them when a call arrives (`isHandleBlocked → false`, §5.6). That is the device fault described in §5.3, not the code. Remaining levers for the device: a full reboot, then *Reset All Settings* (§8). The phone now runs iOS 27.0.1 (24A446). On 2026-10-04 the reinstall exposed a second, concrete symptom — **stale rows surviving the uninstall, inserts colliding** (`UNIQUE constraint failed`) — and **0.1.3 (4) repairs that deadlock in-app** (§5.8). The test call after the repair still got **`shouldBlock: NO`** (15:24:27), and the archive revealed the device also runs **five other blocking/live-ID extensions** — the next lever is turning those off before *Reset All Settings*.
+**The one-line status (2026-10-05):** the device-level theory is dead — **Simple Call Blocker blocks calls on this same iPhone**, so the blocking path works. The difference was the load shape. The old extension read `isIncremental`, which makes CallKit mark it "Confirmed" incremental and expect deltas against a recorded baseline; a baseline that goes stale is a load that quietly holds nothing (§5.4, §5.8), and a device that drops rows is never repaired. Simple Call Blocker instead re-states its whole list as a *complete* request, and the system itself replaces the rows (`Performed initial deletion for extension` in CallKit's log). **0.1.4 (5)** rebuilt the extension in that shape — never reads `isIncremental`, never removes, states the whole list in one synchronous pass (§5.9) — and CallKit's own log shows both loads completing cleanly (`Added 1`, initial deletion performed, no failure, no reload error). **Pending: the test call**, with every other blocking extension switched off (Simple Call Blocker's store holds the same test number `+62 851 1737 3483`, so leaving it on makes the result unreadable). History to here: §5.1–§5.8 — the build trap, the measured 25k ceiling, the stale-rows deadlock and its in-app repair; each re-reading of "the extension loaded N" before this build was a load that diffed against a baseline nothing could verify.
 
 ---
 
@@ -148,6 +148,28 @@ What this does not yet prove: that a freshly-restated row is found by the lookup
 **The test call came the same day** (15:24:27, verdict from the archive): `isHandleBlocked` → `fetchLiveBlockingInfoForHandle blocked=0` → **`shouldBlock: NO shouldSilence NO`** — the freshly-restated row is still not found at call time. The lookup fault is independent of row freshness: the repair stands as product work (the deadlock now self-heals) but did not fix this device.
 
 **A new lead, from the same archive:** the device runs **five other call-blocking / live-ID extensions** — TrueCaller (Block + PriorityCallerID), GetContact (four Call Directory/live extensions), NordVPN (CallDirectory + NordLiveCallerID), Simple-Call-Blocker. All of them share CallKit's one blocking database, and a broken or stale neighbour is exactly the kind of thing that leaves rows behind and breaks lookups device-wide — the §5.3 failure class. Cheapest lever before *Reset All Settings*: turn **every other app off** in Settings › Phone › Call Blocking & Identification (keep Call Blocker on) and retest; if still `NO`, uninstall those blocking apps → reboot → retest.
+
+### 5.9 Third round, 2026-10-05 — the Simple Call Blocker shape, applied (0.1.4 (5))
+
+The person reports Simple Call Blocker blocks calls on this device; that kills the device-wide-corruption reading of §5.3/§5.6 and puts the difference in the extension's load shape. Evidence first, from the device itself:
+
+- Simple Call Blocker's App Group holds only `SimpleCallBlocker.sqlite` (Core Data: `PhoneNumberListEntry`, `PhoneNumberRangeListEntry`, `WhitelistContacts`) — the rules plus a merged list (`ZLIST` `B` = as entered, `F` = merged; `…6029xxx` + `…6030xxx` merged into `…6029000–…6030999`). **No "what CallKit holds" record anywhere** — so it cannot be computing deltas. It re-states its whole list on every load, expanding ranges in the extension. Its store also holds the same test number `+62 851 1737 3483` (§5.8's caller), added ~January — so it must be switched off for any future test to mean anything.
+- `CXCallDirectoryExtensionContext.h` says what that shape is (quoted in `docs/research/ios-call-blocking.md` §2b): **if the extension never reads `isIncremental`, the request is a *complete* request** — "the system replaces the extension's entries with the ones added here … regardless of whether data has ever been successfully loaded in the past". Once an extension *does* read it, CallKit marks it "Confirmed" incremental and expects deltas from then on; a remembered baseline that goes stale is a load that adds nothing while the records say "loaded" (§5.4, §5.8).
+
+**0.1.4 (5)** deletes the whole delta apparatus (`readLoaded`, `hasLoadedRecord`, restate-from-zero, the `incremental` load-record field) and rebuilds `CallDirectoryExtension.swift` in the complete-request shape: never reads `isIncremental`, never removes, states the whole list synchronously in one pass. `removeAllBlockingEntries()` is now never called at all.
+
+**Verified on the device the same day** (build → `devicectl install` → app launch auto-syncs → reload): both loads in CallKit's log show the complete-request replacement, and the extension's records are clean —
+
+```
+14:12:10.441 Extension data request added blocking entry data: <private>
+14:12:10.441 Performed initial deletion for extension with identifier <private>
+14:12:10.442 Added 1 phone number blocking entries
+14:12:10.446 Data request completed successfully for extension with identifier <private>
+```
+
+(second load at `14:12:32` identical; `load.json` new format with no `incremental` key, no failure; `reload.json` no error). "Performed initial deletion" is the system replacing the extension's rows — the self-healing path.
+
+**Pending: the test call.** Protocol: Settings › Phone › Call Blocking & Identification → turn **off every other app** (Simple Call Blocker first — same number), keep Call Blocker on; confirm the caller is not a Contact and its last call is not in Recents; call from `+62 851 1737 3483`; then read the archive (§9) — success is no ring and `VoicemailReason::BlockedCall` / `shouldBlock: YES`. If it still rings with all neighbours off, the lookup fault is per-extension, and the next comparison is a like-for-like test with Simple Call Blocker on and ours off.
 
 ## 6. Phone and simulator state
 

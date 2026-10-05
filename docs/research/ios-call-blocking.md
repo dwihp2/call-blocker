@@ -52,6 +52,29 @@ This is the single most important sentence in the whole API for us: a load that 
 
 **The status API does not mean what it looks like.** `getEnabledStatusForExtension` returns `.enabled` = "Indicates that the extension is enabled" ([EnabledStatus](https://developer.apple.com/documentation/callkit/cxcalldirectorymanager/enabledstatus)) — it reports the Settings switch, not whether the system ever managed to load the list. An extension can therefore be `.enabled` forever while nothing is blocked, which is exactly the state our app reported as healthy.
 
+## 2b. The complete-request escape hatch — the shape that cannot drift
+
+Found 2026-10-05, after Simple Call Blocker was observed blocking on the test device while our extension was not. `CXCallDirectoryExtensionContext.h` states the load contract in terms of what the *extension* does, not what the daemon wants:
+
+> **`isIncremental`**: "If this is called at the beginning of the request (before any entries have been added or removed) and the result is YES, then the request must only provide an 'incremental' set of entries […] Otherwise, **if this method is not called OR is called and returns NO**, then the request must provide a 'complete' set of entries, adding the full list of entries from scratch (and removing none), regardless of whether data has ever been successfully loaded in the past."
+
+So an extension that never reads `isIncremental` and never removes anything is always a **complete request**, and the system does the replacing itself. Observed in CallKit's own log on the iPhone 15 / iOS 27.0.1, 2026-10-05 14:12, on both loads of the rebuilt extension:
+
+```
+Extension data request added blocking entry data: <private>
+Performed initial deletion for extension with identifier <private>
+Added 1 phone number blocking entries
+Data request completed successfully for extension with identifier <private>
+```
+
+"Performed initial deletion" is the *system* deleting that extension's stored rows before applying the new set — the self-healing replacement Simple Call Blocker has relied on all along. Three consequences:
+
+1. `removeAllBlockingEntries()` is never needed; the `DELETE FROM PhoneNumberBlockingEntry` that CallKit's corruption reports (§3) name is never issued by the extension.
+2. Deltas require a remembered baseline, and a baseline the extension cannot verify is a load that quietly holds nothing (§4c's device, §5.4, §5.8's deadlock). A complete request needs no baseline.
+3. Once an extension reads `isIncremental`, CallKit marks it "Confirmed" for incremental loading (`Eligible for incremental loading, so changing incremental loading state to Confirmed`) and from then on expects deltas — the branch this app left, permanently.
+
+Simple Call Blocker's evidence for being this shape: its App Group holds only `SimpleCallBlocker.sqlite` (rules and a merged list — no "what CallKit holds" record anywhere), so it cannot be diffing against anything; and it works.
+
 ## 3. Why "enabled but nothing happens"
 
 1. **Never enabled** → `extensionDisabled` (6).
