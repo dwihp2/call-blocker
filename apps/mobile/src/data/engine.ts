@@ -135,15 +135,18 @@ function matchInput(state: LocalAppState, contacts: E164[] | undefined): MatchIn
     blocking: state.settings.blocking,
     contactsAllowance: state.settings.contactsAllowance,
     ...(contacts === undefined ? {} : { contacts }),
-    rules: state.rules.map((rule) => ({
-      kind: rule.kind,
-      pattern: rule.pattern,
-      number: rule.number,
-      ...(rule.end === undefined ? {} : { end: rule.end }),
-      // iOS expands a Prefix into numbers, so it needs the lengths this country
-      // dials rather than every length E.164 allows.
-      ...(rule.pattern === 'prefix' ? { nationalLengths: nationalLengthsFor(rule.number) } : {}),
-    })),
+    // Disabled Rules act on nothing, so the engines never see them.
+    rules: state.rules
+      .filter((rule) => rule.enabled)
+      .map((rule) => ({
+        kind: rule.kind,
+        pattern: rule.pattern,
+        number: rule.number,
+        ...(rule.end === undefined ? {} : { end: rule.end }),
+        // iOS expands a Prefix into numbers, so it needs the lengths this country
+        // dials rather than every length E.164 allows.
+        ...(rule.pattern === 'prefix' ? { nationalLengths: nationalLengthsFor(rule.number) } : {}),
+      })),
   };
 }
 
@@ -242,8 +245,11 @@ export async function checkNumber(query: E164): Promise<{ result: MatchResult; r
   if (!engine) throw new EngineUnavailableError();
   const state = getState();
   const contacts = await contactsFor(state.settings);
+  // The result's indices point into the Rules the engine was given, so the
+  // same filtered list travels back for the screen to name them.
+  const rules = state.rules.filter((rule) => rule.enabled);
   const result = await engine.checkNumber({ query, ...matchInput(state, contacts) });
-  return { result, rules: state.rules };
+  return { result, rules };
 }
 
 /** Pushes the Rules the app holds to the platform again, and reports what it cost. */

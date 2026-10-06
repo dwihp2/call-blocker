@@ -1,0 +1,3 @@
+# A Rule can be turned off without being deleted
+
+Rules are on or off. Turning one off keeps it in the list — its Number pattern, Label and date stay, ready to edit — and leaves it out of the Effective block list, so the next sync writes a smaller list to the platform. Turning it on is an ordinary Rule change: the platform engine must accept the new list first (ADR 0004), so a Rule that no longer fits Capacity stays off and the refusal is shown. Deleting a Rule to silence it, then registering it again when the nuisance returns, was the alternative; it loses the Label and the date for a change that is meant to be temporary. A disabled Rule is one filter in the app — the platform never sees it — so turning one off costs nothing and cannot be refused.

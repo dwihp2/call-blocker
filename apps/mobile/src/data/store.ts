@@ -91,18 +91,19 @@ export function newRuleId(now: number = Date.now()): string {
   return `rule-${now.toString(36)}-${idCounter.toString(36)}`;
 }
 
-/** A Rule built from `input`, with a fresh id and creation time. */
+/** A Rule built from `input`, with a fresh id, on, and creation time. */
 export function createRule(input: RuleInput, now: Date = new Date()): Rule {
-  return applyRuleInput({ id: newRuleId(now.getTime()), createdAt: now.toISOString() }, input);
+  return applyRuleInput({ id: newRuleId(now.getTime()), createdAt: now.toISOString(), enabled: true }, input);
 }
 
-/** `input` applied to a Rule, keeping its id and the date it was added. */
-export function applyRuleInput(rule: Pick<Rule, 'id' | 'createdAt'>, input: RuleInput): Rule {
+/** `input` applied to a Rule, keeping its id, its on/off state and the date it was added. */
+export function applyRuleInput(rule: Pick<Rule, 'id' | 'createdAt' | 'enabled'>, input: RuleInput): Rule {
   const next: Rule = {
     id: rule.id,
     kind: input.kind,
     pattern: input.pattern,
     number: input.number,
+    enabled: rule.enabled,
     createdAt: rule.createdAt,
   };
   if (input.end !== undefined) next.end = input.end;
@@ -200,6 +201,8 @@ function readRule(value: unknown): Rule | null {
     kind: kind as RuleKind,
     pattern: pattern as PatternType,
     number,
+    // A state file written before Rule toggles existed means enabled.
+    enabled: raw.enabled !== false,
     createdAt,
   };
   if (typeof end === 'string') rule.end = end;

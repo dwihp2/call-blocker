@@ -1,6 +1,6 @@
 # Call Blocker
 
-Blocks and allows incoming calls on iOS and Android. Rules are Single numbers, Prefixes or Intervals; an Allow list overrides Block rules, and the device's contacts can be allowed as a group.
+Blocks and allows incoming calls on iOS and Android. Rules are Single numbers, Prefixes or Intervals; an Allow list overrides Block rules, and the device's contacts can be allowed as a group. A Rule can be turned off without deleting it.
 
 The vocabulary is in [CONTEXT.md](./CONTEXT.md). The decisions behind the design are in [docs/adr](./docs/adr).
 

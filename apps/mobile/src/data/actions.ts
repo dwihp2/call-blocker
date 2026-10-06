@@ -36,6 +36,17 @@ export async function deleteRule(id: string): Promise<ApplyResult> {
   );
 }
 
+/**
+ * Turning a Rule off keeps it in the list and leaves the next sync's list;
+ * turning it on is a change the engine must accept first, like any other
+ * (ADR 0004).
+ */
+export async function setRuleEnabled(id: string, enabled: boolean): Promise<ApplyResult> {
+  const state = getState();
+  const next = state.rules.map((rule) => (rule.id === id ? { ...rule, enabled } : rule));
+  return applyRules(next, state.settings);
+}
+
 export interface ImportEntry {
   /** The line in the pasted text the Rule came from, so a refusal can name it. */
   line: number;

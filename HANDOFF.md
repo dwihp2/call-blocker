@@ -22,7 +22,7 @@ packages/core          TypeScript: Rule parsing (libphonenumber-js), Backup file
 modules/call-directory iOS: RuleEngine.swift, CallDirectoryModule.swift, extension/, plugin/
 modules/call-screening Android: RuleEngine.kt, CallBlockerScreeningService.kt, RuleStore.kt
 fixtures/matching.json 25 cases — the matching contract both native engines are tested against
-docs/adr               0001 precedence, 0002 backup scope, 0003 native matching, 0004 capacity refusals
+docs/adr               0001 precedence, 0002 backup scope, 0003 native matching, 0004 capacity refusals, 0005 rule toggles
 docs/research          the iOS investigation, fully sourced
 docs/ios-lifecycle.md  the pipeline: Rule → App Group → extension → CallKit DB → lookup
 ```
@@ -197,6 +197,7 @@ The person is moving to one blocker at a time: SCB's list moves over so its numb
 - Same build: the in-app explanation — Settings → **How it works** section linking to the `how-it-works` screen — version **0.1.5 (6)**.
 - Next: the person switches Simple Call Blocker off in Settings › Phone › Call Blocking & Identification. SCB's rows stay in the shared database (disabling purges nothing) but hold the same numbers this app now holds.
 - **Prefix costs recalibrated the same day (in the repo, not yet built).** `nationalLengthsFor` now reads a per-country dialled-lengths table (`DIALED_NATIONAL_LENGTHS` in `packages/core/src/parse.ts`; Indonesia: national 8–11 digits, i.e. 10–13 with the country code — probed against libphonenumber validity: fixed lines 8–10 national, mobile 9–11) instead of the raw possible lengths (7–17 national, which made a 10-digit Indonesian prefix claim 111,111 entries instead of 1,111). The Registration preview (`approximatePrefixMatches`) now sums the same lengths the engines expand, so the preview and the Capacity refusal always agree; it used to use only the longest length. Tests updated (`parse.test.ts`, `national-lengths.test.ts`), 51 passing. Lands on the phone with the next build.
+- **Rule toggles, same day (in the repo, not yet built).** Every Rule carries `enabled`; each row in the lists has a Switch and disabled Rules are dimmed. Disabled Rules are filtered before the engines see them — sync, the cost preview, the Number check and the Registration shadow warnings all use the enabled list only — so turning one off just shrinks the next load; turning one on is an ordinary change the engine must accept (`setRuleEnabled`, ADR 0005, CONTEXT vocabulary "Disabled rule"). State files and Backup files from before read as enabled; a Backup keeps a disabled Rule disabled (`enabled: false`). 54 tests passing.
 
 ## 6. Phone and simulator state
 

@@ -75,7 +75,7 @@ export default function RegisterScreen() {
   }, [parsed, kind, label, editing]);
 
   const warnings = useMemo(
-    () => (candidate ? registrationWarnings(state.rules, candidate) : null),
+    () => (candidate ? registrationWarnings(state.rules.filter((rule) => rule.enabled), candidate) : null),
     [candidate, state.rules],
   );
 

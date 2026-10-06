@@ -1,9 +1,9 @@
 import type { EngineStatus, Rule, RuleKind, SyncResult } from '@call-blocker/core';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { deleteRule, setBlocking } from '@/data/actions';
+import { deleteRule, setBlocking, setRuleEnabled } from '@/data/actions';
 import { getStatus, isSupported, previewBlockList, UNSUPPORTED_DETAIL } from '@/data/engine';
 import { useStore } from '@/data/store';
 import { formatCount, formatDate, kindLabel, patternText } from '@/format';
@@ -72,6 +72,13 @@ export default function RulesScreen() {
     if (!outcome.ok) Alert.alert('The Rule was not deleted', outcome.message);
   };
 
+  const toggleRule = async (rule: Rule, enabled: boolean) => {
+    const outcome = await setRuleEnabled(rule.id, enabled);
+    if (!outcome.ok) {
+      Alert.alert(enabled ? 'The Rule was not turned on' : 'The Rule was not turned off', outcome.message);
+    }
+  };
+
   return (
     <Screen>
       {error ? <Banner tone="danger" title="Saved state problem" message={error} /> : null}
@@ -137,18 +144,25 @@ export default function RulesScreen() {
           {shown.map((rule, index) => (
             <View key={rule.id}>
               {index > 0 ? <Divider /> : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityHint="Opens this Rule for editing. Touch and hold to delete it."
-                onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
-                onLongPress={() => setMenuRule(rule)}
-                style={styles.ruleRow}>
-                <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
-                <AppText variant="small" tone="secondary">
-                  {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
-                </AppText>
-                {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
-              </Pressable>
+              <View style={styles.ruleRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityHint="Opens this Rule for editing. Touch and hold to delete it."
+                  onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
+                  onLongPress={() => setMenuRule(rule)}
+                  style={[styles.ruleDetails, rule.enabled ? null : styles.ruleOff]}>
+                  <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
+                  <AppText variant="small" tone="secondary">
+                    {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
+                  </AppText>
+                  {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
+                </Pressable>
+                <Switch
+                  value={rule.enabled}
+                  onValueChange={(next) => void toggleRule(rule, next)}
+                  accessibilityLabel={rule.enabled ? 'Turn this Rule off' : 'Turn this Rule on'}
+                />
+              </View>
             </View>
           ))}
         </Card>
@@ -195,11 +209,18 @@ export default function RulesScreen() {
 const styles = StyleSheet.create({
   list: { gap: 0, paddingVertical: 0 },
   ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  ruleDetails: {
+    flex: 1,
     gap: Spacing.half,
     minHeight: 56,
     paddingVertical: Spacing.two,
     justifyContent: 'center',
   },
+  ruleOff: { opacity: 0.55 },
   actions: { flexDirection: 'row', gap: Spacing.two },
   action: { flex: 1 },
 });

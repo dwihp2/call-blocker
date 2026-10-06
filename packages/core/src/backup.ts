@@ -29,13 +29,20 @@ export function backupFileName(date: Date): string {
 
 /**
  * A Backup file's copy of a rule: its Number pattern, its `end` for an
- * Interval, and its Label. Field order is fixed here, which is what makes
- * serializing stable.
+ * Interval, its Label, and `enabled` only when the Rule is off. Field order is
+ * fixed here, which is what makes serializing stable.
  */
-function backupRule(rule: { pattern: PatternType; number: E164; end?: E164; label?: string }): BackupFile['rules'][number] {
+function backupRule(rule: {
+  pattern: PatternType;
+  number: E164;
+  end?: E164;
+  label?: string;
+  enabled?: boolean;
+}): BackupFile['rules'][number] {
   const copy: BackupFile['rules'][number] = { pattern: rule.pattern, number: rule.number };
   if (rule.pattern === 'interval' && rule.end !== undefined) copy.end = rule.end;
   if (rule.label !== undefined) copy.label = rule.label;
+  if (rule.enabled === false) copy.enabled = false;
   return copy;
 }
 
@@ -97,9 +104,24 @@ function readBackupRule(
     if (typeof end !== 'string' || !E164_PATTERN.test(end)) {
       return { message: `${where} is an Interval with no end in + and digits: ${describeValue(end)}.` };
     }
-    return { rule: { pattern, number, end, ...(typeof value.label === 'string' ? { label: value.label } : {}) } };
+    return {
+      rule: {
+        pattern,
+        number,
+        end,
+        ...(typeof value.label === 'string' ? { label: value.label } : {}),
+        ...(value.enabled === false ? { enabled: false } : {}),
+      },
+    };
   }
-  return { rule: { pattern, number, ...(typeof value.label === 'string' ? { label: value.label } : {}) } };
+  return {
+    rule: {
+      pattern,
+      number,
+      ...(typeof value.label === 'string' ? { label: value.label } : {}),
+      ...(value.enabled === false ? { enabled: false } : {}),
+    },
+  };
 }
 
 /**
@@ -148,7 +170,14 @@ export function isDuplicate(
 
 /** A Rule made from a Backup file's rule, with the fields the app owns. */
 function ruleFromBackup(from: BackupFile['rules'][number], now: string, newId: () => string): Rule {
-  const rule: Rule = { id: newId(), kind: BACKUP_RULE_KIND, pattern: from.pattern, number: from.number, createdAt: now };
+  const rule: Rule = {
+    id: newId(),
+    kind: BACKUP_RULE_KIND,
+    pattern: from.pattern,
+    number: from.number,
+    enabled: from.enabled ?? true,
+    createdAt: now,
+  };
   if (from.pattern === 'interval' && from.end !== undefined) rule.end = from.end;
   if (from.label !== undefined) rule.label = from.label;
   return rule;

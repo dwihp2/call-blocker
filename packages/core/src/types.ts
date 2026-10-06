@@ -23,6 +23,12 @@ export interface Rule {
   /** Interval only: the inclusive end. */
   end?: E164;
   label?: string;
+  /**
+   Whether the Rule is acting. A Disabled rule stays in the list but is left
+   out of the Effective block list, so it blocks (or allows) nothing until it
+   is turned back on. State files from before this field read as enabled.
+   */
+  enabled: boolean;
   createdAt: string;
 }
 
@@ -38,7 +44,8 @@ export interface RuleInput {
 export interface BackupFile {
   schemaVersion: 1;
   exportedAt: string;
-  rules: Array<{ pattern: PatternType; number: E164; end?: E164; label?: string }>;
+  /** `enabled` is written only when false: a disabled Rule restores disabled. */
+  rules: Array<{ pattern: PatternType; number: E164; end?: E164; label?: string; enabled?: boolean }>;
 }
 
 export interface Settings {

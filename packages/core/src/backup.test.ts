@@ -19,6 +19,7 @@ const RULES: Rule[] = [
     pattern: 'single',
     number: '+6281234567890',
     label: 'Spam',
+    enabled: true,
     createdAt: '2026-09-01T00:00:00.000Z',
   },
   {
@@ -27,6 +28,7 @@ const RULES: Rule[] = [
     pattern: 'prefix',
     number: '+62812',
     label: 'Work',
+    enabled: true,
     createdAt: '2026-09-02T00:00:00.000Z',
   },
   {
@@ -34,6 +36,7 @@ const RULES: Rule[] = [
     kind: 'block',
     pattern: 'prefix',
     number: '+628123',
+    enabled: true,
     createdAt: '2026-09-03T00:00:00.000Z',
   },
   {
@@ -42,6 +45,7 @@ const RULES: Rule[] = [
     pattern: 'interval',
     number: '+62812345678',
     end: '+62812345680',
+    enabled: true,
     createdAt: '2026-09-04T00:00:00.000Z',
   },
 ];
@@ -115,6 +119,15 @@ describe('serializeBackup', () => {
     expect(serializeBackup(keysReversed)).toBe(
       serializeBackup(buildBackupFile([RULES[0] as Rule], EXPORTED_AT)),
     );
+  });
+
+  it('writes a disabled Rule as enabled: false and leaves enabled Rules bare', () => {
+    const off: Rule[] = [{ ...(RULES[0] as Rule), enabled: false }];
+    expect(buildBackupFile(off, EXPORTED_AT).rules).toEqual([
+      { pattern: 'single', number: '+6281234567890', label: 'Spam', enabled: false },
+    ]);
+    expect(serializeBackup(buildBackupFile(off, EXPORTED_AT))).toContain('"enabled": false');
+    expect(serializeBackup(buildBackupFile(RULES, EXPORTED_AT))).not.toContain('"enabled"');
   });
 });
 
@@ -203,6 +216,30 @@ describe('parseBackup', () => {
       },
     });
   });
+
+  it('reads a disabled Rule back, and leaves an enabled one bare', () => {
+    const result = parseBackup(
+      JSON.stringify({
+        schemaVersion: 1,
+        exportedAt: EXPORTED_AT,
+        rules: [
+          { pattern: 'prefix', number: '+628123' },
+          { pattern: 'single', number: '+6281234567890', enabled: false },
+        ],
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      file: {
+        schemaVersion: 1,
+        exportedAt: EXPORTED_AT,
+        rules: [
+          { pattern: 'prefix', number: '+628123' },
+          { pattern: 'single', number: '+6281234567890', enabled: false },
+        ],
+      },
+    });
+  });
 });
 
 describe('isDuplicate', () => {
@@ -243,9 +280,17 @@ describe('mergeBackup', () => {
       pattern: 'single',
       number: '+6281234567890',
       label: 'Mine',
+      enabled: true,
       createdAt: '2026-09-01T00:00:00.000Z',
     },
-    { id: 'allow-1', kind: 'allow', pattern: 'prefix', number: '+62812', createdAt: '2026-09-01T00:00:00.000Z' },
+    {
+      id: 'allow-1',
+      kind: 'allow',
+      pattern: 'prefix',
+      number: '+62812',
+      enabled: true,
+      createdAt: '2026-09-01T00:00:00.000Z',
+    },
   ];
 
   const file: BackupFile = {
@@ -264,13 +309,14 @@ describe('mergeBackup', () => {
     expect(merged.rules).toEqual([
       local[0],
       local[1],
-      { id: 'new-1', kind: 'block', pattern: 'prefix', number: '+628123', createdAt: EXPORTED_AT },
+      { id: 'new-1', kind: 'block', pattern: 'prefix', number: '+628123', enabled: true, createdAt: EXPORTED_AT },
       {
         id: 'new-2',
         kind: 'block',
         pattern: 'interval',
         number: '+62812345678',
         end: '+62812345680',
+        enabled: true,
         createdAt: EXPORTED_AT,
       },
     ]);
@@ -305,18 +351,39 @@ describe('replaceBackup', () => {
         pattern: 'single',
         number: '+6281234567890',
         label: 'Spam',
+        enabled: true,
         createdAt: EXPORTED_AT,
       },
-      { id: 'new-2', kind: 'block', pattern: 'prefix', number: '+628123', createdAt: EXPORTED_AT },
+      { id: 'new-2', kind: 'block', pattern: 'prefix', number: '+628123', enabled: true, createdAt: EXPORTED_AT },
       {
         id: 'new-3',
         kind: 'block',
         pattern: 'interval',
         number: '+62812345678',
         end: '+62812345680',
+        enabled: true,
         createdAt: EXPORTED_AT,
       },
     ]);
     expect(replaced.rules.every((rule) => rule.kind === 'block')).toBe(true);
+  });
+
+  it('brings a disabled Rule back disabled', () => {
+    const withOff: BackupFile = {
+      schemaVersion: 1,
+      exportedAt: EXPORTED_AT,
+      rules: [{ pattern: 'prefix', number: '+628123', enabled: false }],
+    };
+    const replaced = replaceBackup(withOff, EXPORTED_AT, ids());
+    expect(replaced.rules).toEqual([
+      {
+        id: 'new-1',
+        kind: 'block',
+        pattern: 'prefix',
+        number: '+628123',
+        enabled: false,
+        createdAt: EXPORTED_AT,
+      },
+    ]);
   });
 });

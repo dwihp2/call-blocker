@@ -34,6 +34,10 @@ _Avoid_: Adding a number
 A short note the person attaches to a Rule to remember why it exists.
 _Avoid_: Name, description
 
+**Disabled rule**:
+A Rule kept in the list but left out of the Effective block list, so it acts on nothing until it is turned back on. Turning a Rule off never refuses; turning it on goes through the same acceptance as any change.
+_Avoid_: Inactive rule, paused rule, muted rule
+
 **Overlap**:
 When a newly registered Rule matches numbers already covered by an existing Rule of the opposite kind. An Allow rule prevails over a Block rule.
 
@@ -89,7 +93,7 @@ The checklist of permissions and platform settings the app needs in order to blo
 The first-launch walkthrough that asks for the permissions Blocking needs.
 
 **Effective block list**:
-The numbers actually blocked at a given moment, after Allow rules and Contacts allowance are applied.
+The numbers actually blocked at a given moment: the enabled Block rules expanded, after Allow rules and Contacts allowance are applied. Disabled rules are not part of it.
 
 **Capacity**:
 How many numbers the iPhone can hold in its blocking list at once. A change that would push the Effective block list past Capacity is refused on iOS, never silently trimmed.
