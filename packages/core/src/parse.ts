@@ -107,6 +107,41 @@ function withCountryCode(text: string, region: RegionCode): string {
 }
 
 /**
+ * The national lengths numbers are actually dialled at, for countries where
+ * libphonenumber's possible lengths are looser than reality: its list includes
+ * short codes and ranges no call ever presents, and every extra length
+ * multiplies what a Prefix costs. National digits only; the country code is
+ * added where the lengths are used.
+ *
+ * Indonesia, probed 2026-10-06 against libphonenumber validity: fixed lines run
+ * 8–10 national digits (Jakarta `21 1234567` …) and mobile 9–11 (`812 3456 78`
+ * is too short to be valid, `851 1737 3483` is 11) — 10–13 digits with the
+ * country code. The metadata's 7–17 would make a 10-digit Prefix claim 111,111
+ * entries instead of the 1,110 it really covers.
+ *
+ * A country without an entry keeps its metadata lengths.
+ */
+const DIALED_NATIONAL_LENGTHS: Partial<Record<RegionCode, number[]>> = {
+  ID: [8, 9, 10, 11],
+};
+
+/**
+ * The national lengths a region's numbers are dialled at: the override when one
+ * exists, otherwise libphonenumber's possible lengths. Ascending, capped at
+ * what E.164 leaves once the country code is out. Undefined when nothing is
+ * known about the region.
+ */
+function dialedNationalLengths(region: RegionCode): number[] | undefined {
+  if (!isSupportedCountry(region)) return undefined;
+  metadata ??= new Metadata();
+  metadata.selectNumberingPlan(region);
+  const lengths = DIALED_NATIONAL_LENGTHS[region] ?? metadata.numberingPlan?.possibleLengths();
+  if (!lengths || lengths.length === 0) return undefined;
+  const cap = E164_DIGITS - getCountryCallingCode(region).length;
+  return lengths.filter((national) => national <= cap).sort((left, right) => left - right);
+}
+
+/**
  * The longest national number the region allows: its numbering plan's maximum
  * from libphonenumber metadata, capped at what E.164 leaves once the country
  * code is taken out of its 15 digits (Indonesia's plan lists lengths up to 17,
@@ -131,28 +166,30 @@ function maxNationalNumberLength(region: RegionCode): number | undefined {
 export function nationalLengthsFor(number: E164): number[] {
   const country = parsePhoneNumberFromString(number)?.country;
   if (!country) return [];
-  metadata ??= new Metadata();
-  metadata.selectNumberingPlan(country);
-  const lengths = metadata.numberingPlan?.possibleLengths();
-  if (!lengths || lengths.length === 0) return [];
+  const lengths = dialedNationalLengths(country);
+  if (!lengths) return [];
   const countryCodeDigits = getCountryCallingCode(country).length;
-  const cap = E164_DIGITS - countryCodeDigits;
-  return lengths
-    .filter((national) => national <= cap)
-    .map((national) => national + countryCodeDigits)
-    .sort((left, right) => left - right);
+  return lengths.map((national) => national + countryCodeDigits);
 }
 
 /**
- * Estimates how many numbers a Prefix covers: ten to the power of the digits
- * still free after the Prefix's own digits, using the region's maximum
- * national number length from libphonenumber metadata, floored at 1.
+ * How many numbers a Prefix covers: every dialled length with room for the
+ * typed digits, summed — the same count the native engines expand to, so the
+ * Registration preview and the Capacity refusal always agree.
  */
 function approximatePrefixMatches(
   country: RegionCode,
   region: RegionCode,
   digitsAfterCountryCode: number,
 ): number {
+  const national = dialedNationalLengths(country) ?? dialedNationalLengths(region);
+  if (national) {
+    let total = 0;
+    for (const length of national) {
+      if (length >= digitsAfterCountryCode) total += 10 ** (length - digitsAfterCountryCode);
+    }
+    return Math.max(1, total);
+  }
   const nationalNumberLength =
     maxNationalNumberLength(country) ??
     maxNationalNumberLength(region) ??

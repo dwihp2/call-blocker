@@ -120,7 +120,7 @@ describe('parseRuleInput', () => {
         pattern: 'prefix',
         number: '+628123',
         display: '+62 812 3*',
-        approxMatches: 10 ** 9,
+        approxMatches: 10 ** 4 + 10 ** 5 + 10 ** 6 + 10 ** 7,
         needsConfirmation: false,
       });
       // 0812 is the usual short form of Indonesia's mobile Prefix, and it is
@@ -129,14 +129,14 @@ describe('parseRuleInput', () => {
         pattern: 'prefix',
         number: '+62812',
         display: '+62 812*',
-        approxMatches: 10 ** 10,
+        approxMatches: 10 ** 5 + 10 ** 6 + 10 ** 7 + 10 ** 8,
         needsConfirmation: true,
       });
       expect(valueOf(parseRuleInput({ text: '6281*', pattern: 'prefix', region: 'ID' }))).toEqual({
         pattern: 'prefix',
         number: '+6281',
         display: '+62 81*',
-        approxMatches: 10 ** 11,
+        approxMatches: 10 ** 6 + 10 ** 7 + 10 ** 8 + 10 ** 9,
         needsConfirmation: true,
       });
     });
@@ -148,18 +148,17 @@ describe('parseRuleInput', () => {
       });
     });
 
-    it('estimates the matches from the region maximum national number length', () => {
+    it('estimates the matches from the lengths the country dials', () => {
       // The United States allows ten national digits, so a six-digit Prefix
       // after the country code leaves four free.
       expect(valueOf(parseRuleInput({ text: '310555*', pattern: 'prefix', region: 'US' }))).toMatchObject({
         approxMatches: 10 ** 4,
       });
-      // Indonesia's plan lists lengths up to 17, which E.164 cannot hold: it
-      // allows a national number of 13 digits beside its two-digit country
-      // code, so a four-digit Prefix leaves nine free.
+      // Indonesia dials 10–13 digits with the country code, so a four-digit
+      // Prefix leaves 4, 5, 6 and 7 free digits across them.
       const five = valueOf(parseRuleInput({ text: '08123*', pattern: 'prefix', region: 'ID' }));
       const six = valueOf(parseRuleInput({ text: '081234*', pattern: 'prefix', region: 'ID' }));
-      expect(five.approxMatches).toBe(10 ** 9);
+      expect(five.approxMatches).toBe(10 ** 4 + 10 ** 5 + 10 ** 6 + 10 ** 7);
       // One more digit of Prefix covers a tenth as many numbers.
       expect(six.approxMatches).toBe(five.approxMatches / 10);
     });

@@ -196,6 +196,7 @@ The person is moving to one blocker at a time: SCB's list moves over so its numb
 - A restorable Backup file of SCB's entire final list (12 entries, the single number as a `single` pattern) is at `/tmp/scb-import-backup.json` — ephemeral; regenerate from the SCB store if it is gone.
 - Same build: the in-app explanation — Settings → **How it works** section linking to the `how-it-works` screen — version **0.1.5 (6)**.
 - Next: the person switches Simple Call Blocker off in Settings › Phone › Call Blocking & Identification. SCB's rows stay in the shared database (disabling purges nothing) but hold the same numbers this app now holds.
+- **Prefix costs recalibrated the same day (in the repo, not yet built).** `nationalLengthsFor` now reads a per-country dialled-lengths table (`DIALED_NATIONAL_LENGTHS` in `packages/core/src/parse.ts`; Indonesia: national 8–11 digits, i.e. 10–13 with the country code — probed against libphonenumber validity: fixed lines 8–10 national, mobile 9–11) instead of the raw possible lengths (7–17 national, which made a 10-digit Indonesian prefix claim 111,111 entries instead of 1,111). The Registration preview (`approximatePrefixMatches`) now sums the same lengths the engines expand, so the preview and the Capacity refusal always agree; it used to use only the longest length. Tests updated (`parse.test.ts`, `national-lengths.test.ts`), 51 passing. Lands on the phone with the next build.
 
 ## 6. Phone and simulator state
 
