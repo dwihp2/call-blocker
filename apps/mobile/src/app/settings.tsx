@@ -225,6 +225,11 @@ export default function SettingsScreen() {
 
       <Section title="How it works">
         <Card>
+          <AppText variant="small" tone="secondary">
+            Your Rules become the list of numbers the phone blocks, and the phone does the
+            blocking — even while the app is closed. The details, and what only you can switch on,
+            are one tap away.
+          </AppText>
           <NavRow
             label="How blocking works"
             detail="From a Rule to a blocked call, in plain words."
