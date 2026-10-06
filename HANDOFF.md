@@ -2,9 +2,28 @@
 
 Written 2026-10-03; **updated the same evening**, after the delta-baseline fix landed and the device fault was proven with a positive insert; **re-checked 2026-10-04** (§5.7). The repo is `/Users/dwihp2/dev/call-blocker`. Read `CONTEXT.md` for the vocabulary, `docs/adr/` for the decisions, and `docs/research/ios-call-blocking.md` for the iOS investigation — this file is the map between them and the current state.
 
-**The one-line status (2026-10-06, evening):** **0.1.6 (7)** is built and installed. It adds the in-app explanation (Settings → **How it works**), per-Rule toggles (a Rule can be switched off without being deleted; ADR 0005), Prefix costs calibrated to the lengths a country really dials (a 10-digit Indonesian prefix is 1,111 entries, not 111,111 and refused), and Rule lists that scroll inside their card instead of stretching the page. **Simple Call Blocker's list is migrated in**: SCB's Core Data store (`ZLIST='F'`, its merged extension-facing list) held 12 ranges / 10,001 numbers; 11 of them became Interval Rules labelled "Simple Call Blocker" (the single `+6285117373483` was already covered by the existing interval), and the app holds **12 Rules / 10,010 numbers**. The phone reloaded them on 0.1.6 — `blocked.json` 10,010 entries, `load.json` entries 10,010 at `2026-10-06T11:00:52Z` with no failure, `reload.json` clean. Details in §5.10; a restorable Backup file of SCB's whole list was written to `/tmp/scb-import-backup.json`. What remains: Android on real hardware, and the product notes in §11.
+**The one-line status (2026-10-06, evening):** **0.1.7 (8)** is built, installed and frozen (`v0.1.7`) — the iOS baseline; the block below says exactly what is verified and how Android work should treat it. It adds the in-app explanation (Settings → **How it works**), per-Rule toggles (a Rule can be switched off without being deleted; ADR 0005), Prefix costs calibrated to the lengths a country really dials (a 10-digit Indonesian prefix is 1,111 entries, not 111,111 and refused), Rule lists that scroll inside their card, and a cosmetic pass on those rows (smaller switches, inset content). **Simple Call Blocker's list is migrated in**: SCB's Core Data store (`ZLIST='F'`, its merged extension-facing list) held 12 ranges / 10,001 numbers; 11 of them became Interval Rules labelled "Simple Call Blocker" (the single `+6285117373483` was already covered by the existing interval), and the app holds **12 Rules / 10,010 numbers**. The phone reloaded them on 0.1.7 — `blocked.json` 10,010 entries, `load.json` entries 10,010 at `2026-10-06T11:10:02Z` with no failure, `reload.json` clean. Details in §5.10; a restorable Backup file of SCB's whole list was written to `/tmp/scb-import-backup.json`. What remains: Android on real hardware, and the product notes in §11.
 
 **The one-line status (2026-10-05, evening — resolved):** the app works and the device was never broken. **0.1.4 (5)** ships the complete-request extension load (§5.9), CallKit's log shows every load completing cleanly, and the device produced a confirmed block — `VoicemailReason::BlockedCall`, 14:29:50, with only Call Blocker enabled. Every other test call rang under iOS platform precedence, not app failure: a number with records in Recents — most of all one called from this iPhone — is not blocked until its history is cleared (DTS-confirmed; §3d of `docs/research/ios-call-blocking.md`; the person cleared it and reports blocking resumed). Two traps recorded for the next test round: "did not ring" can also mean **silenced** (`shouldBlock: NO shouldSilence: YES` — Silence Unknown Callers or a Focus mode), and the shared database keeps neighbour apps' rows after they are switched off (8,901 blocking + 20,005 identification entries loaded 2026-10-05). The whole pipeline — Rule → App Group → extension → CallKit's database → call-time lookup — is documented in `docs/ios-lifecycle.md`. What remains: Android on real hardware, and the product notes in §11.
+
+---
+
+**Frozen version (2026-10-06): `v0.1.7` (8) — iOS first.** This is the baseline: installed on the iPhone 15, verified from the device, and tagged in git (`v0.1.7`). Work moves to Android next, so treat this code and this build as fixed — no churn while Android is brought up.
+
+**What "already worked" means, concretely** (every line from the device, not from the code):
+- Rules reach the phone's blocking list: 12 Rules / 10,010 numbers — `blocked.json` 10,010 entries, `load.json` entries 10,010 with no failure, `reload.json` clean, and CallKit logged `Performed initial deletion` + `Added 10000` / `Added 10` (§5.9–§5.10).
+- A real call was blocked with only this app's extension enabled — `VoicemailReason::BlockedCall`, 14:29:50 on 2026-10-05 (§5.9).
+- Surfaces exercised on the device: Rules (per-Rule switches, scrollable list, exact cost meter), Registration, the Prefix cost preview, Bulk import, Number check, Backup/Restore, Protection status, Onboarding, and Settings → How it works (§5.10).
+
+**Bringing up Android — the next session's job:**
+- Nothing on that side has run on hardware: the Kotlin engine, `CallBlockerScreeningService` and the role request have only passed JVM unit tests (`npm run fixtures:jvm`).
+- `npx expo run:android` from `apps/mobile`; grant the call-screening role; register a Rule; call from another phone. Success = the call is rejected and stays in the call log, no ring, no notification (by design).
+- Compare screen by screen against the list above. The shared parts — Rule parsing, Prefix costs (`packages/core`), Rule toggles, the store — are the same code, so any difference should be Android UI or role behaviour, not logic.
+
+**If Android shows a UI difference, it is a workaround, not a version change:**
+- The app is one codebase; Android differences go behind `Platform.OS === 'android'` branches, following the pattern already in `onboarding.tsx`, `settings.tsx`, `how-it-works.tsx`, `index.tsx` and the engine adapter (`engineForPlatform`, `PLATFORM_PIECE`, `UNSUPPORTED_DETAIL`). Never change the shared behaviour the iOS build was verified against.
+- The frozen artefact is the tag `v0.1.7`; any change at all becomes a new version (0.1.8+) with its own device pass for the platform it touches. Do not move the tag.
+- Order of preference for a workaround: platform copy/style inside the screen → a platform constant beside the existing ones → a field in the shared engine adapter (last, because it touches both platforms' code paths).
 
 ---
 
@@ -204,7 +223,7 @@ The person is moving to one blocker at a time: SCB's list moves over so its numb
 
 - **iPhone 15, iOS 27.0.1 (24A446)** (updated from 27.0/24A437 after the 2026-10-03 session), team `6NN3PT736K` — a **free Personal Team**: 7-day provisioning profiles (currently expiring 2026-10-07) and one device. Free is enough for development; a paid membership is needed for other people's devices, TestFlight, the App Store, or Live Caller ID Lookup.
 - Bundle ids: `com.dwihp2.call-blocker` (iOS), `com.dwihp2.callblocker` (Android — no hyphen; illegal in a Java package). App Group `group.com.dwihp2.call-blocker`.
-- The app on the phone is **0.1.6 (7)**, upgraded in place through 0.1.5 (6), so Rules, the App Group store and the platform list all survived. It holds the **12 migrated Rules / 10,010 numbers** (§5.10), loaded cleanly at `2026-10-06T11:00:52Z` — `load.json` records them with no failure. Simple Call Blocker is to be switched off now that its list lives here.
+- The app on the phone is **0.1.7 (8)** — the frozen iOS baseline (tag `v0.1.7`) — upgraded in place since 0.1.5 (6), so Rules, the App Group store and the platform list all survived. It holds the **12 migrated Rules / 10,010 numbers** (§5.10), loaded cleanly at `2026-10-06T11:10:02Z` — `load.json` records them with no failure. Simple Call Blocker is to be switched off now that its list lives here.
 - A simulator (iPhone 15, iOS 17 runtime) is used for UI work; the app runs there headless and can be driven by writing `Documents/call-blocker/tour.txt` and relaunching (a temporary hook is needed for that; it was removed).
 - Device tooling that works today: `xcrun devicectl` (install, launch, screenshot, file copy from app/app-group containers, crash logs, **process terminate**), `pymobiledevice3` (installed via `uv tool install`, at `~/.local/bin/pymobiledevice3` — `syslog live`, `syslog collect`), and `idevicecrashreport`. `idevicesyslog` does **not** attach on iOS 27 — do not use it. Everything here works over USB **without root**.
 
@@ -280,7 +299,7 @@ What remains is the accidental root project from running `expo run:ios` at the r
 - [ ] Restore a narrow prefix Rule for the test device once the cap allows it.
 
 **Android**
-- [ ] **Never run on real hardware.** `npx expo run:android` from `apps/mobile`, grant the call-screening role, register a Rule, call from another phone.
+- [ ] **Never run on real hardware.** `npx expo run:android` from `apps/mobile`, grant the call-screening role, register a Rule, call from another phone. Compare against the frozen-version block at the top of this file (what iOS already does) and keep any Android difference inside a `Platform.OS` branch.
 
 **Housekeeping / environment**
 - [ ] No background jobs left running (the log capture service was stopped 2026-10-03).
