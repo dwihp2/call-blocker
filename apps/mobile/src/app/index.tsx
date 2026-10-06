@@ -1,7 +1,7 @@
 import type { EngineStatus, Rule, RuleKind, SyncResult } from '@call-blocker/core';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { deleteRule, setBlocking, setRuleEnabled } from '@/data/actions';
 import { getStatus, isSupported, previewBlockList, UNSUPPORTED_DETAIL } from '@/data/engine';
@@ -28,6 +28,13 @@ const EMPTY_MESSAGE: Record<RuleKind, string> = {
   allow:
     'An Allow rule lets matching callers through even when a Block rule would stop them. It does not include Contacts allowance.',
 };
+
+/**
+ * The Rule list scrolls inside its Card instead of stretching the page: half
+ * the window, so the Blocking switch and the list header stay in view however
+ * many Rules there are.
+ */
+const LIST_MAX_HEIGHT = Dimensions.get('window').height * 0.5;
 
 export default function RulesScreen() {
   const theme = useAppTheme();
@@ -141,30 +148,32 @@ export default function RulesScreen() {
         </EmptyState>
       ) : (
         <Card style={styles.list}>
-          {shown.map((rule, index) => (
-            <View key={rule.id}>
-              {index > 0 ? <Divider /> : null}
-              <View style={styles.ruleRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityHint="Opens this Rule for editing. Touch and hold to delete it."
-                  onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
-                  onLongPress={() => setMenuRule(rule)}
-                  style={[styles.ruleDetails, rule.enabled ? null : styles.ruleOff]}>
-                  <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
-                  <AppText variant="small" tone="secondary">
-                    {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
-                  </AppText>
-                  {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
-                </Pressable>
-                <Switch
-                  value={rule.enabled}
-                  onValueChange={(next) => void toggleRule(rule, next)}
-                  accessibilityLabel={rule.enabled ? 'Turn this Rule off' : 'Turn this Rule on'}
-                />
+          <ScrollView style={styles.listScroll} nestedScrollEnabled>
+            {shown.map((rule, index) => (
+              <View key={rule.id}>
+                {index > 0 ? <Divider /> : null}
+                <View style={styles.ruleRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityHint="Opens this Rule for editing. Touch and hold to delete it."
+                    onPress={() => router.push({ pathname: '/register', params: { id: rule.id } })}
+                    onLongPress={() => setMenuRule(rule)}
+                    style={[styles.ruleDetails, rule.enabled ? null : styles.ruleOff]}>
+                    <AppText variant="mono">{patternText(rule, settings.defaultRegion)}</AppText>
+                    <AppText variant="small" tone="secondary">
+                      {`${kindLabel(rule.kind)} · added ${formatDate(rule.createdAt)}`}
+                    </AppText>
+                    {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
+                  </Pressable>
+                  <Switch
+                    value={rule.enabled}
+                    onValueChange={(next) => void toggleRule(rule, next)}
+                    accessibilityLabel={rule.enabled ? 'Turn this Rule off' : 'Turn this Rule on'}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
+            ))}
+          </ScrollView>
         </Card>
       )}
 
@@ -207,7 +216,8 @@ export default function RulesScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 0, paddingVertical: 0 },
+  list: { gap: 0, paddingVertical: 0, overflow: 'hidden' },
+  listScroll: { maxHeight: LIST_MAX_HEIGHT },
   ruleRow: {
     flexDirection: 'row',
     alignItems: 'center',
