@@ -148,7 +148,7 @@ export default function RulesScreen() {
         </EmptyState>
       ) : (
         <Card style={styles.list}>
-          <ScrollView style={styles.listScroll} nestedScrollEnabled>
+          <ScrollView style={styles.listScroll} contentContainerStyle={styles.listContent} nestedScrollEnabled>
             {shown.map((rule, index) => (
               <View key={rule.id}>
                 {index > 0 ? <Divider /> : null}
@@ -166,6 +166,7 @@ export default function RulesScreen() {
                     {rule.label ? <AppText variant="small">{rule.label}</AppText> : null}
                   </Pressable>
                   <Switch
+                    style={styles.ruleSwitch}
                     value={rule.enabled}
                     onValueChange={(next) => void toggleRule(rule, next)}
                     accessibilityLabel={rule.enabled ? 'Turn this Rule off' : 'Turn this Rule on'}
@@ -218,6 +219,17 @@ export default function RulesScreen() {
 const styles = StyleSheet.create({
   list: { gap: 0, paddingVertical: 0, overflow: 'hidden' },
   listScroll: { maxHeight: LIST_MAX_HEIGHT },
+  listContent: {
+    // Air above the first row and below the last, so a switch never sits on the
+    // Card's edge or on the divider above it.
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
+    // A lane for the scroll indicator, so it does not draw over the switches.
+    paddingRight: Spacing.three,
+  },
+  // Smaller than the Settings switches: a touch smaller reads better repeated
+  // down a list. The layout box stays standard, so the touch target does too.
+  ruleSwitch: { transform: [{ scale: 0.8 }] },
   ruleRow: {
     flexDirection: 'row',
     alignItems: 'center',
