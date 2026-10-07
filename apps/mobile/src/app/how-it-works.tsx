@@ -20,9 +20,8 @@ export default function HowItWorksScreen() {
         <Card>
           <AppText>
             You register Rules: a single number, a Prefix, or an Interval, as Block or Allow. The
-            app turns them into the list of numbers the phone should block. Allow rules and the
-            Contacts allowance take numbers back out of that list, and what is left is the list
-            that acts.
+            app turns them into the list of numbers the phone should block. Allow rules take
+            numbers back out of that list, and what is left is the list that acts.
           </AppText>
           <AppText>
             The phone blocks one number at a time, so Prefixes and Intervals are expanded into

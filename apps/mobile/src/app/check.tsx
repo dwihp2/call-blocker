@@ -30,7 +30,6 @@ interface CheckOutcome {
 
 /** Names the Rule a decision came from, or the settings reason when none did. */
 function reasonText(source: DecisionSource, rules: Rule[], region: RegionCode): string {
-  if (source.type === 'contacts') return 'Contacts allowance: this caller is in your contacts.';
   if (source.type === 'off') return 'Blocking is off, so no calls are blocked.';
   if (source.type === 'none') return 'No Rule matches this number.';
   const rule = rules[source.index];
@@ -196,7 +195,7 @@ export default function CheckScreen() {
             An Allow rule wins over a Block rule wherever they meet, whatever their size.
           </AppText>
           <AppText variant="small">
-            A Single number Block rule still blocks someone in your contacts even with Contacts allowance on.
+            This app never reads your contacts, so nothing saved there changes a decision.
           </AppText>
           <AppText variant="small">
             When Blocking is off, nothing is blocked, but the Rules stay saved.

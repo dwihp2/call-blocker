@@ -10,7 +10,7 @@
  * already canonical, and contacts are parsed to E.164 before they leave.
  */
 
-import { FIXTURES_JSON, nationalLengthsFor, parseRuleInput } from '@call-blocker/core';
+import { FIXTURES_JSON, nationalLengthsFor } from '@call-blocker/core';
 import type {
   AndroidEngine,
   BlockingEngine,
@@ -19,14 +19,11 @@ import type {
   IosEngine,
   MatchInput,
   MatchResult,
-  PermissionState,
-  RegionCode,
   Rule,
   SyncResult,
 } from '@call-blocker/core';
 import { callDirectory } from 'call-directory';
 import { callScreening } from 'call-screening';
-import * as Contacts from 'expo-contacts';
 import { Platform } from 'react-native';
 
 import { formatCount, describeError } from '@/format';
@@ -53,8 +50,6 @@ function unsupportedStatus(): EngineStatus {
   return {
     active: false,
     platformPieceOn: false,
-    contacts: 'undetermined',
-    notifications: 'undetermined',
     detail: UNSUPPORTED_DETAIL,
   };
 }
@@ -79,62 +74,9 @@ export async function getStatus(): Promise<EngineStatus> {
   }
 }
 
-/** What the app can tell about the contacts permission without asking for it. */
-export async function contactsPermissionState(): Promise<PermissionState> {
-  try {
-    const permission = await Contacts.getPermissionsAsync();
-    if (permission.granted) return 'granted';
-    return permission.canAskAgain ? 'undetermined' : 'denied';
-  } catch {
-    return 'undetermined';
-  }
-}
-
-/** Asks for the contacts permission, which only the Settings screen does. */
-export async function requestContactsPermission(): Promise<PermissionState> {
-  try {
-    const permission = await Contacts.requestPermissionsAsync();
-    if (permission.granted) return 'granted';
-    return permission.canAskAgain ? 'undetermined' : 'denied';
-  } catch {
-    return 'denied';
-  }
-}
-
-/**
- * Every number in the device's contacts, in canonical form. A contact whose
- * number does not parse for the Default region is dropped rather than guessed
- * at, because the engines only ever see canonical numbers.
- */
-async function contactsAsNumbers(region: RegionCode): Promise<E164[]> {
-  const numbers = new Set<E164>();
-  try {
-    const permission = await Contacts.getPermissionsAsync();
-    if (!permission.granted) return [];
-    const contacts = await Contacts.Contact.getAllDetails([Contacts.ContactField.PHONES]);
-    for (const contact of contacts) {
-      for (const phone of contact.phones ?? []) {
-        const parsed = parseRuleInput({ text: phone.number ?? '', pattern: 'single', region });
-        if (parsed.ok) numbers.add(parsed.value.number);
-      }
-    }
-  } catch {
-    return [];
-  }
-  return [...numbers];
-}
-
-/** Contacts are only ever handed over when the Contacts allowance is on. */
-async function contactsFor(settings: LocalSettings): Promise<E164[] | undefined> {
-  if (!settings.contactsAllowance) return undefined;
-  return contactsAsNumbers(settings.defaultRegion);
-}
-
-function matchInput(state: LocalAppState, contacts: E164[] | undefined): MatchInput {
+function matchInput(state: LocalAppState): MatchInput {
   return {
     blocking: state.settings.blocking,
-    contactsAllowance: state.settings.contactsAllowance,
-    ...(contacts === undefined ? {} : { contacts }),
     // Disabled Rules act on nothing, so the engines never see them.
     rules: state.rules
       .filter((rule) => rule.enabled)
@@ -157,8 +99,7 @@ function matchInput(state: LocalAppState, contacts: E164[] | undefined): MatchIn
 async function attempt(rules: Rule[], settings: LocalSettings): Promise<SyncResult | null> {
   const engine = engineForPlatform();
   if (!engine) return null;
-  const contacts = await contactsFor(settings);
-  return engine.sync(matchInput({ schemaVersion: 1, settings, rules }, contacts));
+  return engine.sync(matchInput({ schemaVersion: 1, settings, rules }));
 }
 
 function refusalMessage(result: SyncResult): string {
@@ -244,11 +185,10 @@ export async function checkNumber(query: E164): Promise<{ result: MatchResult; r
   const engine = engineForPlatform();
   if (!engine) throw new EngineUnavailableError();
   const state = getState();
-  const contacts = await contactsFor(state.settings);
   // The result's indices point into the Rules the engine was given, so the
   // same filtered list travels back for the screen to name them.
   const rules = state.rules.filter((rule) => rule.enabled);
-  const result = await engine.checkNumber({ query, ...matchInput(state, contacts) });
+  const result = await engine.checkNumber({ query, ...matchInput(state) });
   return { result, rules };
 }
 
@@ -287,9 +227,8 @@ export async function previewBlockList(): Promise<SyncResult | null> {
   const engine = engineForPlatform();
   if (!engine || !isIosEngine(engine)) return null;
   const state = getState();
-  const contacts = await contactsFor(state.settings);
   try {
-    return await engine.preview(matchInput(state, contacts));
+    return await engine.preview(matchInput(state));
   } catch {
     return null;
   }
@@ -335,4 +274,20 @@ export async function verifyEngine(): Promise<{ failures: string[] }> {
   } catch (reason) {
     return { failures: [describeError(reason)] };
   }
+}
+
+/**
+ * What this build asks the platform for, read back from the platform itself
+ * rather than written down here: Android's requested permissions, iOS's
+ * declared usage reasons. `null` where there is no platform to ask (the web).
+ *
+ * The Privacy screen shows this list as it is, so the app cannot claim more or
+ * less than the system says (ADR 0006).
+ */
+export async function declaredAccess(): Promise<string[] | null> {
+  const engine = engineForPlatform();
+  if (!engine) return null;
+  if (isIosEngine(engine)) return engine.getDeclaredUsageDescriptions();
+  if (isAndroidEngine(engine)) return engine.getRequestedPermissions();
+  return null;
 }

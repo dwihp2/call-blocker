@@ -12,4 +12,5 @@ export interface CallScreeningNativeModule {
   sync(input: MatchInput): Promise<SyncResult>;
   checkNumber(input: { query: E164 } & MatchInput): Promise<MatchResult>;
   selfCheck(fixturesJson: string): Promise<{ failures: string[] }>;
+  getRequestedPermissions(): Promise<string[]>;
 }

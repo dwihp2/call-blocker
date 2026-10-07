@@ -28,14 +28,7 @@ class CallBlockerScreeningService : CallScreeningService() {
       return
     }
 
-    // Read contacts live, so the allowance is never stale.
-    val contacts = if (snapshot.contactsAllowance) {
-      Contacts.read(this, snapshot.defaultRegion)
-    } else {
-      emptyList()
-    }
-
-    val result = evaluate(snapshot.toInput(contacts), query)
+    val result = evaluate(snapshot.toInput(), query)
     respondToCall(callDetails, responseFor(result.blocked))
   }
 

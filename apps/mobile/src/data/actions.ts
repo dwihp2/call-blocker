@@ -82,7 +82,7 @@ export async function restoreRules(next: Rule[]): Promise<PartialApplyResult> {
   return applyRulesAllowingPartial(next, getState().settings);
 }
 
-/** Every settings change is offered to the engine too: contacts and Blocking both move the Effective block list. */
+/** Every settings change is offered to the engine first: a change it refuses is never saved. */
 export async function updateSettings(patch: Partial<LocalSettings>): Promise<ApplyResult> {
   const state = getState();
   return applyRules(state.rules, { ...state.settings, ...patch });

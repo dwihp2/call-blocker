@@ -23,7 +23,7 @@ All Block rules the person has registered.
 _Avoid_: Blacklist
 
 **Allow list**:
-All Allow rules the person has registered. Does not include Contacts allowance.
+All Allow rules the person has registered.
 _Avoid_: Whitelist
 
 **Registration**:
@@ -74,12 +74,6 @@ A phone number normalized to international (E.164) form, so the same number type
 The country used to interpret numbers typed in local format. Starts as the device's region, and can be changed in Settings or for a single Registration.
 _Avoid_: Country code
 
-### Contacts
-
-**Contacts allowance**:
-A person-controlled toggle that treats every number in the device's contacts as allowed. Independent of the Allow list. A Single number Block rule still blocks a contact.
-_Avoid_: Contacts whitelist
-
 ### Protection
 
 **Blocking**:
@@ -93,7 +87,7 @@ The checklist of permissions and platform settings the app needs in order to blo
 The first-launch walkthrough that asks for the permissions Blocking needs.
 
 **Effective block list**:
-The numbers actually blocked at a given moment: the enabled Block rules expanded, after Allow rules and Contacts allowance are applied. Disabled rules are not part of it.
+The numbers actually blocked at a given moment: the enabled Block rules expanded, after Allow rules are applied. Disabled rules are not part of it.
 
 **Capacity**:
 How many numbers the iPhone can hold in its blocking list at once. A change that would push the Effective block list past Capacity is refused on iOS, never silently trimmed.

@@ -26,7 +26,7 @@ function assertCase(value: unknown, index: number): FixtureCase {
 export function parseFixtureFile(value: unknown): FixtureFile {
   if (typeof value !== 'object' || value === null) fail('not an object');
   const file = value as Record<string, unknown>;
-  if (file.version !== 1) fail(`unsupported version ${String(file.version)}`);
+  if (file.version !== 2) fail(`unsupported version ${String(file.version)}`);
   if (!Array.isArray(file.cases)) fail('cases is not an array');
   const cases = file.cases.map(assertCase);
   const names = new Set<string>();
@@ -34,5 +34,5 @@ export function parseFixtureFile(value: unknown): FixtureFile {
     if (names.has(c.name)) fail(`duplicate case name "${c.name}"`);
     names.add(c.name);
   }
-  return { version: 1, description: file.description as string | undefined, cases };
+  return { version: 2, description: file.description as string | undefined, cases };
 }

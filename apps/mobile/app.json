@@ -2,7 +2,7 @@
   "expo": {
     "name": "Call Blocker",
     "slug": "call-blocker",
-    "version": "0.1.7",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "callblocker",
@@ -10,7 +10,7 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.dwihp2.call-blocker",
-      "buildNumber": "8",
+      "buildNumber": "10",
       "appleTeamId": "6NN3PT736K",
       "supportsTablet": false
     },
@@ -22,7 +22,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 10
     },
     "web": {
       "output": "static",

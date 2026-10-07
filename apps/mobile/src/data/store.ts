@@ -71,7 +71,6 @@ function emptyState(): LocalAppState {
     schemaVersion: 1,
     settings: {
       defaultRegion: deviceRegion(),
-      contactsAllowance: false,
       blocking: true,
       onboarded: false,
     },
@@ -168,7 +167,6 @@ function readSettings(value: unknown): LocalSettings {
       : deviceRegion();
   return {
     defaultRegion: region,
-    contactsAllowance: raw.contactsAllowance === true,
     blocking: raw.blocking !== false,
     onboarded: raw.onboarded === true,
   };

@@ -7,7 +7,7 @@ import org.json.JSONObject
 
 /**
  * The snapshot the screening service reads at call time: the Blocking switch,
- * the Contacts allowance, the Default region and the Rules, as one JSON file at
+ * the Default region and the Rules, as one JSON file at
  * `filesDir/call-screening/snapshot.json`.
  *
  * Writes land through a temporary file and a rename, so a call arriving while
@@ -19,19 +19,16 @@ object RuleStore {
   private const val TEMP_FILE_NAME = "snapshot.json.tmp"
 
   private const val KEY_BLOCKING = "blocking"
-  private const val KEY_CONTACTS_ALLOWANCE = "contactsAllowance"
   private const val KEY_DEFAULT_REGION = "defaultRegion"
   private const val KEY_RULES = "rules"
 
-  /** The snapshot as the app wrote it: everything Blocking needs but the contacts. */
+  /** The snapshot as the app wrote it: everything Blocking needs. */
   data class Snapshot(
     val blocking: Boolean,
-    val contactsAllowance: Boolean,
     val defaultRegion: String,
     val rules: List<EngineRule>
   ) {
-    fun toInput(contacts: List<String> = emptyList()): EngineInput =
-      EngineInput(blocking, contactsAllowance, contacts, rules)
+    fun toInput(): EngineInput = EngineInput(blocking, rules)
   }
 
   @Volatile private var cachedSnapshot: Snapshot? = null
@@ -65,12 +62,12 @@ object RuleStore {
   }
 
   /**
-   * The snapshot as an [EngineInput], with no contacts. Blocking off when
-   * nothing has been written yet, so a call is allowed.
+   * The snapshot as an [EngineInput]. Blocking off when nothing has been
+   * written yet, so a call is allowed.
    */
   fun read(context: Context): EngineInput =
     readSnapshot(context)?.toInput()
-      ?: EngineInput(blocking = false, contactsAllowance = false, contacts = emptyList(), rules = emptyList())
+      ?: EngineInput(blocking = false, rules = emptyList())
 
   /** Writes the snapshot, replacing the previous one in a single rename. */
   fun write(context: Context, input: EngineInput, defaultRegion: String): Boolean {
@@ -80,7 +77,6 @@ object RuleStore {
     }
     val payload = JSONObject().apply {
       put(KEY_BLOCKING, input.blocking)
-      put(KEY_CONTACTS_ALLOWANCE, input.contactsAllowance)
       put(KEY_DEFAULT_REGION, defaultRegion)
       put(KEY_RULES, rulesToJson(input.rules))
     }
@@ -120,7 +116,6 @@ object RuleStore {
     val json = JSONObject(text)
     return Snapshot(
       blocking = json.optBoolean(KEY_BLOCKING, true),
-      contactsAllowance = json.optBoolean(KEY_CONTACTS_ALLOWANCE, false),
       defaultRegion = json.optString(KEY_DEFAULT_REGION, "US"),
       rules = rulesOf(json.optJSONArray(KEY_RULES))
     )

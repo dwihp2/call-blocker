@@ -26,7 +26,7 @@ const EMPTY_MESSAGE: Record<RuleKind, string> = {
   block:
     'A Rule tells the app which callers to stop: a single number, a prefix like +62812*, or an interval of numbers.',
   allow:
-    'An Allow rule lets matching callers through even when a Block rule would stop them. It does not include Contacts allowance.',
+    'An Allow rule lets matching callers through even when a Block rule would stop them.',
 };
 
 /**

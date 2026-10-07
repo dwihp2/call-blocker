@@ -1,5 +1,4 @@
 import CallKit
-import Contacts
 import ExpoModulesCore
 import UIKit
 
@@ -21,6 +20,15 @@ public class CallDirectoryModule: Module {
       true
     }
 
+    // ADR 0006: what this app asks iOS for, read from its own Info.plist rather
+    // than written down twice — the Privacy screen shows exactly what the App
+    // Store will. Empty when the app declares no permission reasons at all.
+    Function("getDeclaredUsageDescriptions") { () -> [String] in
+      (Bundle.main.infoDictionary ?? [:]).keys
+        .filter { $0.hasSuffix("UsageDescription") }
+        .sorted()
+    }
+
     AsyncFunction("getStatus") { (promise: Promise) in
       CXCallDirectoryManager.sharedInstance.getEnabledStatusForExtension(withIdentifier: self.extensionBundleIdentifier) { status, error in
         let pieceOn = status == .enabled
@@ -29,8 +37,6 @@ public class CallDirectoryModule: Module {
           // person turns the extension on in Settings › Phone.
           active: pieceOn,
           platformPieceOn: pieceOn,
-          contacts: Self.contactPermission(),
-          notifications: "granted",
           detail: self.statusDetail(pieceOn: pieceOn, error: error)
         ))
       }
@@ -209,20 +215,6 @@ public class CallDirectoryModule: Module {
 
   // MARK: - Status detail
 
-  private static func contactPermission() -> String {
-    switch CNContactStore.authorizationStatus(for: .contacts) {
-    case .authorized:
-      return "granted"
-    case .denied, .restricted:
-      return "denied"
-    case .notDetermined:
-      return "undetermined"
-    default:
-      // iOS 18's limited access still lets the app read the numbers it can see.
-      return "granted"
-    }
-  }
-
   private func statusDetail(pieceOn: Bool, error: Error?) -> String {
     // CallKit reports an error while the extension has never been turned on,
     // which is the state of every fresh install: that is "off", not a failure
@@ -310,15 +302,11 @@ struct RuleRecord: Record {
 
 struct MatchInputRecord: Record {
   @Field var blocking: Bool = true
-  @Field var contactsAllowance: Bool = false
-  @Field var contacts: [String]? = nil
   @Field var rules: [RuleRecord] = []
 
   var engineInput: EngineInput {
     return EngineInput(
       blocking: blocking,
-      contactsAllowance: contactsAllowance,
-      contacts: contacts ?? [],
       rules: rules.map {
         EngineRule(
           kind: $0.kind,
@@ -335,15 +323,11 @@ struct MatchInputRecord: Record {
 struct CheckNumberRecord: Record {
   @Field var query: String = ""
   @Field var blocking: Bool = true
-  @Field var contactsAllowance: Bool = false
-  @Field var contacts: [String]? = nil
   @Field var rules: [RuleRecord] = []
 
   var engineInput: EngineInput {
     return EngineInput(
       blocking: blocking,
-      contactsAllowance: contactsAllowance,
-      contacts: contacts ?? [],
       rules: rules.map {
         EngineRule(
           kind: $0.kind,
@@ -362,8 +346,6 @@ struct CheckNumberRecord: Record {
 struct StatusRecord: Record {
   @Field var active: Bool = false
   @Field var platformPieceOn: Bool = false
-  @Field var contacts: String = "undetermined"
-  @Field var notifications: String = "granted"
   @Field var detail: String? = nil
 }
 
@@ -377,7 +359,7 @@ struct SyncResultRecord: Record {
 }
 
 struct DecisionSourceRecord: Record {
-  /** `rule`, `contacts`, `off` or `none`. */
+  /** `rule`, `off` or `none`. */
   @Field var type: String = "none"
   /** Rules only: the index of the deciding Rule. */
   @Field var index: Int? = nil
@@ -389,8 +371,6 @@ struct DecisionSourceRecord: Record {
     case .rule(let index):
       self.type = "rule"
       self.index = index
-    case .contacts:
-      self.type = "contacts"
     case .off:
       self.type = "off"
     case .none:

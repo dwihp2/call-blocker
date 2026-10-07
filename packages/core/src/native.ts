@@ -1,14 +1,10 @@
 import type { E164, MatchInput, MatchResult } from './types';
 
-export type PermissionState = 'granted' | 'denied' | 'undetermined';
-
 export interface EngineStatus {
   /** Is this device able to block calls right now? */
   active: boolean;
   /** iOS: the Call Directory extension in Settings > Phone. Android: the call screening role. */
   platformPieceOn: boolean;
-  contacts: PermissionState;
-  notifications: PermissionState;
   /** Human-readable detail for Protection status, e.g. when the list was last written. */
   detail?: string;
 }
@@ -49,9 +45,19 @@ export interface IosEngine extends BlockingEngine {
   /** Counts what a rule set would cost without touching the extension. */
   preview(input: MatchInput): Promise<SyncResult>;
   openBlockingSettings(): Promise<void>;
+  /**
+   * Every permission reason this app declares, read from its own Info.plist:
+   * the same strings the App Store shows. Empty when it asks iOS for nothing.
+   */
+  getDeclaredUsageDescriptions(): Promise<string[]>;
 }
 
 export interface AndroidEngine extends BlockingEngine {
   requestScreeningRole(): Promise<{ screeningRole: boolean }>;
   openRoleSettings(): Promise<void>;
+  /**
+   * The permissions this build requests, read back from the package manager:
+   * what the system's own Permissions page lists for the app.
+   */
+  getRequestedPermissions(): Promise<string[]>;
 }

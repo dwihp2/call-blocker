@@ -15,9 +15,9 @@ const FIXTURES_PATH = '../../fixtures/matching.json';
 const onDisk: unknown = JSON.parse(readFileSync(FIXTURES_PATH, 'utf8'));
 
 describe('fixtures/matching.json', () => {
-  it('is a version 1 fixture table with cases in it', () => {
+  it('is a version 2 fixture table with cases in it', () => {
     const file = parseFixtureFile(onDisk);
-    expect(file.version).toBe(1);
+    expect(file.version).toBe(2);
     expect(file.cases.length).toBeGreaterThan(0);
   });
 

@@ -24,8 +24,8 @@ none of our code ever sees a phone number that is calling.
 ## 1. Writing — what a Rule change triggers
 
 1. **Build the Effective block list.** `sync` expands Prefixes and Intervals
-   into individual numbers (E.164 digits, no `+`), subtracts Allow rules and
-   the Contacts allowance, and refuses a change past **Capacity 25,000**
+   into individual numbers (E.164 digits, no `+`), subtracts Allow rules, and
+   refuses a change past **Capacity 25,000**
    instead of trimming it (`docs/adr/0004`).
 2. **Write it whole.** The entire list goes into the App Group as
    `blocked.json` — one flat, ascending, de-duplicated array. There is no

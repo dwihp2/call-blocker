@@ -1,0 +1,7 @@
+# The app does not read the device's contacts
+
+The Contacts allowance — a switch that treated every number in the address book as allowed — is gone. It was the app's last dangerous permission and the only reason the app ever touched contact data: Android's screening service read contacts on every call, and on iOS the app enumerated them at sync time to take them back out of the block list. Removing it makes the claim unconditional on both platforms and in every build: this app has no contacts access.
+
+What it costs: Allow rules are now the only exception to a Block rule, so a Prefix or an Interval that covers people the person knows blocks them until each one is allowed by hand. The intended replacement is a permissionless one — a system contact picker that hands the app only the people chosen, out of process, with no permission dialog (iOS's `CNContactPickerViewController` does this; Android's `ACTION_PICK` needs a device check that the picked contact can be read without `READ_CONTACTS`). Until that exists, Registration carries the warning when a Prefix or an Interval is saved.
+
+Rejected alternatives: keeping the allowance as an opt-in setting (the permission stays declared, so the store lists Contacts and the sensitive-permission declaration stays in play, which is the whole point of removing it), and reading contacts live on Android only (same problem, and the two platforms would disagree about what one Rule set does).

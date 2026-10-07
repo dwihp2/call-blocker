@@ -1,19 +1,12 @@
 import { FIXTURES_JSON } from '@call-blocker/core';
-import type { PermissionState, RegionCode } from '@call-blocker/core';
+import type { RegionCode } from '@call-blocker/core';
 import Constants from 'expo-constants';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Alert } from 'react-native';
 
 import { setBlocking, updateSettings } from '@/data/actions';
-import {
-  contactsPermissionState,
-  isSupported,
-  openPlatformSettings,
-  requestContactsPermission,
-  UNSUPPORTED_DETAIL,
-  verifyEngine,
-} from '@/data/engine';
+import { isSupported, UNSUPPORTED_DETAIL, verifyEngine } from '@/data/engine';
 import { useStore } from '@/data/store';
 import { describeError } from '@/format';
 import {
@@ -46,13 +39,7 @@ const CONTRACT_VERSION = (() => {
   }
 })();
 
-const PERMISSION_LABEL: Record<PermissionState, string> = {
-  granted: 'Granted',
-  denied: 'Denied in the system settings',
-  undetermined: 'Not asked yet',
-};
-
-type Busy = 'region' | 'contacts' | 'blocking' | null;
+type Busy = 'region' | 'blocking' | null;
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -60,56 +47,14 @@ export default function SettingsScreen() {
   const { settings } = state;
   const supported = isSupported();
 
-  const [permission, setPermission] = useState<PermissionState | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [contactsNotice, setContactsNotice] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let live = true;
-      if (supported) {
-        void (async () => {
-          const next = await contactsPermissionState();
-          if (!live) return;
-          setPermission(next);
-          if (next === 'granted') setContactsNotice(false);
-        })();
-      }
-      return () => {
-        live = false;
-      };
-    }, [supported]),
-  );
 
   const changeRegion = async (region: RegionCode) => {
     setBusy('region');
     setRefusal(null);
     try {
       const outcome = await updateSettings({ defaultRegion: region });
-      if (!outcome.ok) setRefusal(outcome.message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const changeContactsAllowance = async (next: boolean) => {
-    setBusy('contacts');
-    setRefusal(null);
-    setContactsNotice(false);
-    try {
-      if (!next || !supported) {
-        const outcome = await updateSettings({ contactsAllowance: next });
-        if (!outcome.ok) setRefusal(outcome.message);
-        return;
-      }
-      const asked = await requestContactsPermission();
-      setPermission(asked);
-      if (asked !== 'granted') {
-        setContactsNotice(true);
-        return;
-      }
-      const outcome = await updateSettings({ contactsAllowance: true });
       if (!outcome.ok) setRefusal(outcome.message);
     } finally {
       setBusy(null);
@@ -142,15 +87,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const openSystemSettings = async () => {
-    try {
-      const opened = await openPlatformSettings();
-      if (!opened) setRefusal('The system settings could not be opened on this device.');
-    } catch (reason) {
-      setRefusal(describeError(reason));
-    }
-  };
-
   return (
     <Screen>
       {error ? <Banner tone="danger" title="Saved state problem" message={error} /> : null}
@@ -179,38 +115,6 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section
-        title="Contacts"
-        description="The Contacts allowance treats every number in your contacts as allowed. It is independent of the Allow list.">
-        <Card>
-          <ToggleRow
-            label="Contacts allowance"
-            description="A Single number Block rule still blocks a contact."
-            value={settings.contactsAllowance}
-            onValueChange={(next) => void changeContactsAllowance(next)}
-            disabled={busy !== null}
-          />
-          {supported ? (
-            <>
-              <Divider />
-              <KeyValueRow
-                label="Contacts permission"
-                value={permission === null ? 'Checking…' : PERMISSION_LABEL[permission]}
-              />
-            </>
-          ) : null}
-        </Card>
-        {contactsNotice ? (
-          <Banner
-            tone="warning"
-            title="Contacts access is off"
-            message="Without access to your contacts the Contacts allowance stays off. A Single number Block rule still blocks a contact. You can grant access later in the system settings."
-            actionLabel="Open system settings"
-            onPress={() => void openSystemSettings()}
-          />
-        ) : null}
-      </Section>
-
       <Section title="Blocking">
         <Card>
           <ToggleRow
@@ -234,6 +138,20 @@ export default function SettingsScreen() {
             label="How blocking works"
             detail="From a Rule to a blocked call, in plain words."
             onPress={() => router.push('/how-it-works')}
+          />
+        </Card>
+      </Section>
+
+      <Section title="Privacy">
+        <Card>
+          <AppText variant="small" tone="secondary">
+            No account, no analytics, and nothing sent anywhere. What this app asks the system
+            for is read back from the system itself.
+          </AppText>
+          <NavRow
+            label="What this app asks for"
+            detail="The permissions this build requests, and what it never does."
+            onPress={() => router.push('/privacy')}
           />
         </Card>
       </Section>

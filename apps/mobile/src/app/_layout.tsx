@@ -75,6 +75,7 @@ export default function RootLayout() {
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       <Stack.Screen name="protection" options={{ title: 'Protection' }} />
       <Stack.Screen name="how-it-works" options={{ title: 'How it works' }} />
+      <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />
       <Stack.Screen name="onboarding" options={{ title: 'Set up blocking', headerShown: false }} />
     </Stack>
   );

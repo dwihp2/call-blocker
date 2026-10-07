@@ -17,15 +17,12 @@ data class EngineRule(val kind: String, val pattern: String, val number: String,
  */
 data class EngineInput(
   val blocking: Boolean,
-  val contactsAllowance: Boolean,
-  val contacts: List<String>,
   val rules: List<EngineRule>
 )
 
 /** What settled a decision. `index` points into the Rules the engine was given. */
 sealed class Decision {
   data class Rule(val index: Int) : Decision()
-  object Contacts : Decision()
   object Off : Decision()
   object None : Decision()
 }
@@ -47,11 +44,9 @@ private const val PATTERN_INTERVAL = "interval"
  * (1) Blocking off decides `off` and no Rule is consulted.
  * (2) A matching Allow rule decides `rule` and allows the call, whatever size
  *     the Block rule it overrides is.
- * (3) A matching Single number Block rule decides `rule` and blocks the call,
- *     beating Contacts allowance.
- * (4) Contacts allowance on and the number in contacts decides `contacts`.
- * (5) Any other matching Block rule decides `rule` and blocks the call.
- * (6) Otherwise `none`, allowed.
+ * (3) A matching Single number Block rule decides `rule` and blocks the call.
+ * (4) Any other matching Block rule decides `rule` and blocks the call.
+ * (5) Otherwise `none`, allowed.
  * When several Block rules match, the most specific reports: Single number
  * first, then the first Prefix or Interval in input order. When several Allow
  * rules match, the first in input order reports.
@@ -79,7 +74,7 @@ fun evaluate(input: EngineInput, query: String): Result {
     }
   }
 
-  // (3) A matching Single number Block rule beats Contacts allowance.
+  // (3) A matching Single number Block rule.
   for (index in matched) {
     val rule = input.rules[index]
     if (rule.kind == KIND_BLOCK && rule.pattern == PATTERN_SINGLE) {
@@ -87,19 +82,14 @@ fun evaluate(input: EngineInput, query: String): Result {
     }
   }
 
-  // (4) Contacts allowance.
-  if (input.contactsAllowance && queryDigits.isNotEmpty() && input.contacts.any { digitsOf(it) == queryDigits }) {
-    return Result(blocked = false, decidedBy = Decision.Contacts, matches = matched)
-  }
-
-  // (5) Any other matching Block rule.
+  // (4) Any other matching Block rule.
   for (index in matched) {
     if (input.rules[index].kind == KIND_BLOCK) {
       return Result(blocked = true, decidedBy = Decision.Rule(index), matches = matched)
     }
   }
 
-  // (6) Nothing matched.
+  // (5) Nothing matched.
   return Result(blocked = false, decidedBy = Decision.None, matches = matched)
 }
 
@@ -189,7 +179,6 @@ private fun intervalContains(queryDigits: String, startDigits: String, endDigits
 
 private fun decisionTypeOf(decision: Decision): String = when (decision) {
   is Decision.Rule -> "rule"
-  Decision.Contacts -> "contacts"
   Decision.Off -> "off"
   Decision.None -> "none"
 }
@@ -203,8 +192,6 @@ private fun describe(blocked: Boolean, type: String, index: Int?): String {
 
 internal fun engineInputOf(json: JSONObject): EngineInput = EngineInput(
   blocking = if (json.has("blocking")) json.optBoolean("blocking", true) else true,
-  contactsAllowance = json.optBoolean("contactsAllowance", false),
-  contacts = stringsOf(json.optJSONArray("contacts")),
   rules = rulesOf(json.optJSONArray("rules"))
 )
 
@@ -223,17 +210,4 @@ internal fun rulesOf(array: JSONArray?): List<EngineRule> {
     )
   }
   return rules
-}
-
-internal fun stringsOf(array: JSONArray?): List<String> {
-  if (array == null) return emptyList()
-  val values = ArrayList<String>(array.length())
-  for (index in 0 until array.length()) {
-    if (array.isNull(index)) continue
-    val value = array.optString(index, "")
-    if (value.isNotEmpty()) {
-      values.add(value)
-    }
-  }
-  return values
 }

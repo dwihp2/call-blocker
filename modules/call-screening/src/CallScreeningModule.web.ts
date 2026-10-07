@@ -17,8 +17,6 @@ class CallScreeningWebModule extends NativeModule<{}> implements CallScreeningNa
     return {
       active: false,
       platformPieceOn: false,
-      contacts: 'undetermined',
-      notifications: 'undetermined',
       detail: 'Call screening is only available on Android',
     };
   }
@@ -45,6 +43,10 @@ class CallScreeningWebModule extends NativeModule<{}> implements CallScreeningNa
 
   async selfCheck(): Promise<{ failures: string[] }> {
     return { failures: [] };
+  }
+
+  async getRequestedPermissions(): Promise<string[]> {
+    return [];
   }
 }
 

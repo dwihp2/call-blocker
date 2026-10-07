@@ -34,6 +34,8 @@ export const callScreening: AndroidEngine = {
     requireCallScreeningModule().checkNumber(input),
   selfCheck: (fixturesJson: string): Promise<{ failures: string[] }> =>
     requireCallScreeningModule().selfCheck(fixturesJson),
+  getRequestedPermissions: (): Promise<string[]> =>
+    requireCallScreeningModule().getRequestedPermissions(),
 };
 
 export default callScreening;

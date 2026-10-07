@@ -44,14 +44,10 @@ public struct EngineRule {
 /** Everything the engine needs to answer a query, in the app's canonical Rule order. */
 public struct EngineInput {
   public let blocking: Bool
-  public let contactsAllowance: Bool
-  public let contacts: [String]
   public let rules: [EngineRule]
 
-  public init(blocking: Bool, contactsAllowance: Bool, contacts: [String] = [], rules: [EngineRule]) {
+  public init(blocking: Bool, rules: [EngineRule]) {
     self.blocking = blocking
-    self.contactsAllowance = contactsAllowance
-    self.contacts = contacts
     self.rules = rules
   }
 }
@@ -59,7 +55,6 @@ public struct EngineInput {
 /** What settled a decision. `rule` carries the index into `EngineInput.rules`. */
 public enum EngineDecision: Equatable {
   case rule(Int)
-  case contacts
   case off
   case none
 }
@@ -81,7 +76,6 @@ extension EngineDecision: CustomStringConvertible {
   public var description: String {
     switch self {
     case .rule(let index): return "rule(\(index))"
-    case .contacts: return "contacts"
     case .off: return "off"
     case .none: return "none"
     }
@@ -256,8 +250,8 @@ private func compile(_ input: EngineInput) -> [CompiledRule] {
 
 /**
  The precedence the fixture table states, highest first: Blocking off, a matching
- Allow rule, a matching Single number Block rule (beating Contacts allowance),
- Contacts allowance, any other matching Block rule, then allowed.
+ Allow rule, a matching Single number Block rule, any other matching Block rule,
+ then allowed.
 
  Blocking off decides `off` without consulting a Rule, but `matches` still
  reports the Rules the number matches: it is a report for the Number check, not
@@ -279,9 +273,6 @@ public func evaluate(_ input: EngineInput, query: String) -> EngineResult {
   if let single = matched.first(where: { $0.kind == "block" && $0.isSingle }) {
     return EngineResult(blocked: true, decidedBy: .rule(single.index), matches: matches)
   }
-  if input.contactsAllowance, input.contacts.contains(where: { engineDigits($0) == queryDigits }) {
-    return EngineResult(blocked: false, decidedBy: .contacts, matches: matches)
-  }
   if let block = matched.first(where: { $0.kind == "block" }) {
     return EngineResult(blocked: true, decidedBy: .rule(block.index), matches: matches)
   }
@@ -292,9 +283,7 @@ public func evaluate(_ input: EngineInput, query: String) -> EngineResult {
 
 /**
  The numbers actually blocked right now: the Block rules expanded, minus every
- number an Allow rule matches, minus the Contacts when the allowance is on. A
- Single number Block rule outranks Contacts allowance, so a contact covered by
- one stays blocked.
+ number an Allow rule matches.
  */
 private func effectiveRanges(_ input: EngineInput) -> [NumberRange] {
   guard input.blocking else {
@@ -303,18 +292,7 @@ private func effectiveRanges(_ input: EngineInput) -> [NumberRange] {
   let rules = compile(input)
   let blocks = rules.filter { $0.kind == "block" }.flatMap { $0.ranges }
   let allows = rules.filter { $0.kind == "allow" }.flatMap { $0.ranges }
-  var result = subtract(normalize(blocks), normalize(allows))
-
-  if input.contactsAllowance {
-    let singlyBlocked = Set(rules.filter { $0.kind == "block" && $0.isSingle }.map { $0.digits })
-    let contactRanges = input.contacts
-      .map { engineDigits($0) }
-      .filter { !singlyBlocked.contains($0) }
-      .compactMap { Int64($0) }
-      .map { NumberRange(lower: $0, upper: $0) }
-    result = subtract(result, normalize(contactRanges))
-  }
-  return result
+  return subtract(normalize(blocks), normalize(allows))
 }
 
 /**
@@ -384,8 +362,6 @@ public func rejectedRuleIndices(_ input: EngineInput, capacity: Int = callDirect
     let dropped = Set(removed)
     return EngineInput(
       blocking: input.blocking,
-      contactsAllowance: input.contactsAllowance,
-      contacts: input.contacts,
       rules: input.rules.enumerated().filter { !dropped.contains($0.offset) }.map { $0.element }
     )
   }
@@ -420,8 +396,6 @@ private struct FixtureFilePayload: Decodable {
     }
     let name: String
     let blocking: Bool?
-    let contactsAllowance: Bool?
-    let contacts: [String]?
     let rules: [Rule]
     let query: String
     let expect: Expectation
@@ -433,7 +407,6 @@ private struct FixtureFilePayload: Decodable {
 private func expectation(of source: FixtureFilePayload.Case.Expectation.Source) -> EngineDecision {
   switch source.type {
   case "rule": return .rule(source.index ?? -1)
-  case "contacts": return .contacts
   case "off": return .off
   default: return .none
   }
@@ -455,8 +428,6 @@ public func fixtureFailures(_ fixturesJSON: String) -> [String] {
   for testCase in payload.cases {
     let input = EngineInput(
       blocking: testCase.blocking ?? true,
-      contactsAllowance: testCase.contactsAllowance ?? false,
-      contacts: testCase.contacts ?? [],
       rules: testCase.rules.map { EngineRule(kind: $0.kind, pattern: $0.pattern, number: $0.number, end: $0.end) }
     )
     let expected = expectation(of: testCase.expect.decidedBy)

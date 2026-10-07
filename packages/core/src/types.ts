@@ -50,7 +50,6 @@ export interface BackupFile {
 
 export interface Settings {
   defaultRegion: RegionCode;
-  contactsAllowance: boolean;
   /** The Blocking switch. */
   blocking: boolean;
 }
@@ -68,7 +67,6 @@ export interface AppState {
  */
 export type DecisionSource =
   | { type: 'rule'; index: number }
-  | { type: 'contacts' }
   | { type: 'off' }
   | { type: 'none' };
 
@@ -78,7 +76,7 @@ export interface Decision {
 }
 
 export interface DecisionSourceExpectation {
-  type: 'rule' | 'contacts' | 'off' | 'none';
+  type: 'rule' | 'off' | 'none';
   /** Rules only: the index of the deciding Rule. */
   index?: number;
 }
@@ -90,9 +88,6 @@ export interface DecisionSourceExpectation {
  */
 export interface MatchInput {
   blocking: boolean;
-  contactsAllowance: boolean;
-  /** Canonical numbers from the device's contacts. */
-  contacts?: E164[];
   /**
    * The lengths a Canonical number in each Rule's country can have, country
    * code included, supplied by the app from number metadata. The engines
@@ -118,15 +113,13 @@ export interface FixtureCase {
   name: string;
   /** Defaults to true. */
   blocking?: boolean;
-  contactsAllowance?: boolean;
-  contacts?: E164[];
   rules: MatchInput['rules'];
   query: E164;
   expect: { blocked: boolean; decidedBy: DecisionSourceExpectation };
 }
 
 export interface FixtureFile {
-  version: 1;
+  version: 2;
   description?: string;
   cases: FixtureCase[];
 }

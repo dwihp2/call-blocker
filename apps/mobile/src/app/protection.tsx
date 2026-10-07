@@ -1,13 +1,12 @@
 import type { EngineStatus, SyncResult } from '@call-blocker/core';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Linking, Platform } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 
 import {
   getStatus,
   isSupported,
   openPlatformSettings,
-  requestContactsPermission,
   requestScreeningRole,
   syncNow,
   UNSUPPORTED_DETAIL,
@@ -19,13 +18,12 @@ import {
   Banner,
   Button,
   Card,
-  Divider,
   Screen,
   Section,
   StatusRow,
 } from '@/ui/components';
 
-type Busy = 'piece' | 'contacts' | 'sync';
+type Busy = 'piece' | 'sync';
 
 interface Notice {
   tone: 'info' | 'warning' | 'danger' | 'success';
@@ -80,7 +78,7 @@ function pieceActionLabel(androidRoleRefused: boolean): string {
 }
 
 export default function ProtectionScreen() {
-  const { state, error } = useStore();
+  const { error } = useStore();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -104,6 +102,16 @@ export default function ProtectionScreen() {
       void refresh();
     }, [refresh, supported]),
   );
+
+  // Returning from iOS Settings is not a navigation event, so focus alone would
+  // leave the extension showing as off after the person turned it on.
+  useEffect(() => {
+    if (!supported) return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void refresh();
+    });
+    return () => subscription.remove();
+  }, [refresh, supported]);
 
   const pieceAction = async () => {
     if (busy) return;
@@ -132,30 +140,6 @@ export default function ProtectionScreen() {
     }
   };
 
-  const contactsAction = async () => {
-    if (busy) return;
-    setBusy('contacts');
-    setActionError(null);
-    try {
-      await requestContactsPermission();
-      await refresh();
-    } catch (reason) {
-      setActionError(describeError(reason));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const notificationsAction = async () => {
-    if (busy) return;
-    setActionError(null);
-    try {
-      await Linking.openSettings();
-    } catch (reason) {
-      setActionError(describeError(reason));
-    }
-  };
-
   const runSync = async () => {
     if (busy) return;
     setBusy('sync');
@@ -169,9 +153,6 @@ export default function ProtectionScreen() {
       setBusy(null);
     }
   };
-
-  const allowance = state.settings.contactsAllowance ? 'on' : 'off';
-  const contactsDetail = `Only needed for the Contacts allowance, which is ${allowance}.`;
 
   return (
     <Screen>
@@ -212,26 +193,6 @@ export default function ProtectionScreen() {
                 state={status.platformPieceOn ? 'on' : 'attention'}
                 actionLabel={!status.platformPieceOn && busy === null ? pieceActionLabel(androidRoleRefused) : undefined}
                 onAction={() => void pieceAction()}
-              />
-              <Divider />
-              <StatusRow
-                label="Contacts"
-                detail={contactsDetail}
-                state={status.contacts === 'granted' ? 'on' : status.contacts === 'denied' ? 'attention' : 'off'}
-                actionLabel={status.contacts !== 'granted' && busy === null ? 'Allow contacts access' : undefined}
-                onAction={() => void contactsAction()}
-              />
-              <Divider />
-              <StatusRow
-                label="Notifications"
-                detail={
-                  status.notifications === 'granted'
-                    ? undefined
-                    : 'The app cannot warn you about blocked calls while this is off.'
-                }
-                state={status.notifications === 'granted' ? 'on' : 'attention'}
-                actionLabel={status.notifications !== 'granted' && busy === null ? 'Open app settings' : undefined}
-                onAction={() => void notificationsAction()}
               />
             </Card>
           </Section>

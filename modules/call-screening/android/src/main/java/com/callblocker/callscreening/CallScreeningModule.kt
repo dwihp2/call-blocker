@@ -1,6 +1,5 @@
 package com.callblocker.callscreening
 
-import android.Manifest
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
@@ -34,8 +33,6 @@ class CallScreeningModule : Module() {
       mapOf(
         "active" to roleHeld,
         "platformPieceOn" to roleHeld,
-        "contacts" to permissionState(Manifest.permission.READ_CONTACTS),
-        "notifications" to notificationState(),
         "detail" to roleDetail(roleHeld)
       )
     }
@@ -62,7 +59,7 @@ class CallScreeningModule : Module() {
     AsyncFunction("sync") { input: Map<String, Any?> ->
       val engineInput = engineInputOf(input)
       val defaultRegion = RuleStore.readSnapshot(androidContext())?.defaultRegion
-        ?: Contacts.deviceRegion(androidContext())
+        ?: deviceRegion(androidContext())
       val written = RuleStore.write(androidContext(), engineInput, defaultRegion)
       mapOf(
         "written" to written,
@@ -76,14 +73,9 @@ class CallScreeningModule : Module() {
 
     AsyncFunction("checkNumber") { input: Map<String, Any?> ->
       val passed = engineInputOf(input)
-      val contacts = if (passed.contactsAllowance) {
-        passed.contacts.ifEmpty { Contacts.read(androidContext(), Contacts.deviceRegion(androidContext())) }
-      } else {
-        emptyList()
-      }
       // Evaluated on the spot, against the input just passed: a Number check
       // never depends on a stale snapshot.
-      val result = evaluate(passed.copy(contacts = contacts), input["query"] as? String ?: "")
+      val result = evaluate(passed, input["query"] as? String ?: "")
       mapOf(
         "blocked" to result.blocked,
         "decidedBy" to decisionOf(result.decidedBy),
@@ -93,6 +85,18 @@ class CallScreeningModule : Module() {
 
     AsyncFunction("selfCheck") { fixturesJson: String ->
       mapOf("failures" to fixtureFailures(fixturesJson))
+    }
+
+    /**
+     * ADR 0006: the permissions this build asks Android for, read back from the
+     * package manager — the same list the system's Permissions page shows for
+     * the app, so the Privacy screen cannot claim more or less than the truth.
+     */
+    AsyncFunction("getRequestedPermissions") {
+      val context = androidContext()
+      @Suppress("DEPRECATION")
+      val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+      (info.requestedPermissions ?: emptyArray()).sorted()
     }
 
     OnActivityResult { _, payload ->
@@ -117,23 +121,6 @@ class CallScreeningModule : Module() {
 
   private fun isRoleHeld(): Boolean =
     roleManager()?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) ?: false
-
-  private fun permissionState(permission: String): String {
-    val context = appContext.reactContext ?: return "denied"
-    return if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
-      "granted"
-    } else {
-      "denied"
-    }
-  }
-
-  /** Below Android 13 every app may post notifications, so the state is simply granted. */
-  private fun notificationState(): String =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      permissionState(Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-      "granted"
-    }
 
   private fun roleDetail(roleHeld: Boolean): String = when {
     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> "Call screening needs Android 10 or later"
@@ -163,8 +150,6 @@ class CallScreeningModule : Module() {
 
 private fun engineInputOf(input: Map<String, Any?>): EngineInput = EngineInput(
   blocking = input["blocking"] as? Boolean ?: true,
-  contactsAllowance = input["contactsAllowance"] as? Boolean ?: false,
-  contacts = (input["contacts"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
   rules = (input["rules"] as? List<*>)?.mapNotNull { ruleOf(it) } ?: emptyList()
 )
 
@@ -181,7 +166,6 @@ private fun ruleOf(value: Any?): EngineRule? {
 
 private fun decisionOf(decision: Decision): Map<String, Any?> = when (decision) {
   is Decision.Rule -> mapOf("type" to "rule", "index" to decision.index)
-  Decision.Contacts -> mapOf("type" to "contacts")
   Decision.Off -> mapOf("type" to "off")
   Decision.None -> mapOf("type" to "none")
 }

@@ -29,8 +29,6 @@ const inertCallScreeningModule: CallScreeningNativeModule = {
   getStatus: async (): Promise<EngineStatus> => ({
     active: false,
     platformPieceOn: false,
-    contacts: 'undetermined',
-    notifications: 'undetermined',
     detail: 'Call screening is only available on Android',
   }),
   requestScreeningRole: async () => ({ screeningRole: false }),
@@ -48,4 +46,5 @@ const inertCallScreeningModule: CallScreeningNativeModule = {
     matches: [],
   }),
   selfCheck: async (): Promise<{ failures: string[] }> => ({ failures: [] }),
+  getRequestedPermissions: async (): Promise<string[]> => [],
 };

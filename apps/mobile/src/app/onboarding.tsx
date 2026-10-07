@@ -1,14 +1,13 @@
-import type { EngineStatus, PermissionState } from '@call-blocker/core';
+import type { EngineStatus } from '@call-blocker/core';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Platform, StyleSheet } from 'react-native';
 
-import { finishOnboarding, updateSettings } from '@/data/actions';
+import { finishOnboarding } from '@/data/actions';
 import {
   getStatus,
   isSupported,
   openPlatformSettings,
-  requestContactsPermission,
   requestScreeningRole,
   UNSUPPORTED_DETAIL,
 } from '@/data/engine';
@@ -38,31 +37,45 @@ function blockingDescription(): string {
 export default function OnboardingScreen() {
   const router = useRouter();
   const { ready, state } = useStore();
-  const [step, setStep] = useState<1 | 2>(1);
   const [status, setStatus] = useState<EngineStatus | null>(null);
-  const [contacts, setContacts] = useState<PermissionState | null>(null);
   const [roleRefused, setRoleRefused] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Set once the walkthrough has decided to leave, so it never finishes twice. */
+  const finished = useRef(false);
   const supported = isSupported();
 
   useEffect(() => {
     if (ready && state.settings.onboarded) router.replace('/');
   }, [ready, state.settings.onboarded, router]);
 
+  /**
+   * Blocking's state changes outside this app — iOS Settings › Phone, the
+   * Android role dialog — so the screen re-reads it whenever it comes back.
+   */
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await getStatus());
+    } catch {
+      // A status that cannot be read leaves the last one on screen.
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      if (!supported) return undefined;
-      let live = true;
-      void (async () => {
-        const next = await getStatus();
-        if (live) setStatus(next);
-      })();
-      return () => {
-        live = false;
-      };
-    }, [supported]),
+      if (supported) void refresh();
+    }, [refresh, supported]),
   );
+
+  // Returning from iOS Settings is not a navigation event, so focus alone would
+  // leave the extension showing as off after the person turned it on.
+  useEffect(() => {
+    if (!supported) return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void refresh();
+    });
+    return () => subscription.remove();
+  }, [refresh, supported]);
 
   const enableBlocking = async () => {
     setFailure(null);
@@ -83,24 +96,7 @@ export default function OnboardingScreen() {
     }
   };
 
-  const enableContacts = async () => {
-    setFailure(null);
-    setBusy(true);
-    try {
-      const permission = await requestContactsPermission();
-      setContacts(permission);
-      if (permission === 'granted') {
-        const outcome = await updateSettings({ contactsAllowance: true });
-        if (!outcome.ok) setFailure(outcome.message);
-      }
-    } catch (reason) {
-      setFailure(describeError(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const finish = async () => {
+  const finish = useCallback(async () => {
     setFailure(null);
     setBusy(true);
     try {
@@ -115,7 +111,16 @@ export default function OnboardingScreen() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [router]);
+
+  // Blocking is the one thing this screen sets up, so the moment the platform
+  // piece is on there is nothing left to do here: the person lands on their
+  // Rules instead of being left on a screen that is already finished.
+  useEffect(() => {
+    if (!ready || status?.active !== true || finished.current) return;
+    finished.current = true;
+    void finish();
+  }, [ready, status, finish]);
 
   const blockingState: 'on' | 'off' | 'attention' =
     status === null ? 'off' : status.active ? 'on' : status.platformPieceOn ? 'attention' : 'off';
@@ -129,73 +134,44 @@ export default function OnboardingScreen() {
   return (
     <Screen topInset>
       <AppText variant="title">Set up Blocking</AppText>
-      <AppText variant="small" tone="secondary">{`Step ${step} of 2`}</AppText>
 
       {failure ? <Banner tone="danger" title="That did not work" message={failure} /> : null}
 
-      {step === 1 ? (
-        <Section title="Blocking" description={blockingDescription()}>
-          {supported ? (
-            <>
-              {status ? <Card><StatusRow label="Blocking" state={blockingState} detail={blockingDetail} /></Card> : null}
-              {roleRefused ? (
-                <Banner
-                  tone="warning"
-                  title="The call screening role was not granted"
-                  message="The call screening role has to be granted in the Android system settings. Open them again to grant it."
-                  actionLabel="Open system settings"
-                  onPress={() => void openPlatformSettings()}
-                />
-              ) : null}
+      <Section title="Blocking" description={blockingDescription()}>
+        {supported ? (
+          <>
+            {status ? <Card><StatusRow label="Blocking" state={blockingState} detail={blockingDetail} /></Card> : null}
+            {roleRefused ? (
+              <Banner
+                tone="warning"
+                title="The call screening role was not granted"
+                message="The call screening role has to be granted in the Android system settings. Open them again to grant it."
+                actionLabel="Open system settings"
+                onPress={() => void openPlatformSettings()}
+              />
+            ) : null}
+            {status?.active ? (
+              <Button label="Continue" onPress={() => void finish()} busy={busy} style={styles.action} />
+            ) : (
               <Row gap={Spacing.three}>
-                <Button
-                  label="Enable"
-                  onPress={() => void enableBlocking()}
-                  busy={busy}
-                  style={styles.action}
-                />
+                <Button label="Enable" onPress={() => void enableBlocking()} busy={busy} style={styles.action} />
                 <Button
                   label="Skip"
                   variant="secondary"
-                  onPress={() => setStep(2)}
+                  onPress={() => void finish()}
                   disabled={busy}
                   style={styles.action}
                 />
               </Row>
-            </>
-          ) : (
-            <>
-              <Banner tone="info" title="This device cannot block calls" message={UNSUPPORTED_DETAIL} />
-              <Button label="Skip" variant="secondary" onPress={() => setStep(2)} />
-            </>
-          )}
-        </Section>
-      ) : (
-        <Section
-          title="Contacts"
-          description="Contact access is needed only for the Contacts allowance, the optional setting that treats every number in your contacts as allowed. A Single number Block rule still blocks a contact, and you can turn it on later in Settings.">
-          {contacts === 'granted' ? (
-            <Banner tone="success" title="Contact access is on" message="The Contacts allowance is now on." />
-          ) : contacts ? (
-            <Banner
-              tone="warning"
-              title="Contact access was not granted"
-              message="The Contacts allowance stays off. You can turn it on later in Settings."
-            />
-          ) : null}
-          <Row gap={Spacing.three}>
-            <Button
-              label="Enable"
-              onPress={() => void enableContacts()}
-              busy={busy}
-              disabled={contacts === 'granted'}
-              style={styles.action}
-            />
-            <Button label="Skip" variant="secondary" onPress={() => void finish()} disabled={busy} style={styles.action} />
-          </Row>
-          <Button label="Finish" onPress={() => void finish()} busy={busy} />
-        </Section>
-      )}
+            )}
+          </>
+        ) : (
+          <>
+            <Banner tone="info" title="This device cannot block calls" message={UNSUPPORTED_DETAIL} />
+            <Button label="Skip" variant="secondary" onPress={() => void finish()} />
+          </>
+        )}
+      </Section>
     </Screen>
   );
 }

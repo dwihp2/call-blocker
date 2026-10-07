@@ -19,6 +19,7 @@ const inertCallDirectory: IosEngine = {
   checkNumber: () => unsupported(),
   selfCheck: () => unsupported(),
   openBlockingSettings: () => unsupported(),
+  getDeclaredUsageDescriptions: () => unsupported(),
 };
 
 export default inertCallDirectory;
