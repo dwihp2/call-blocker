@@ -4,7 +4,7 @@ Blocks and allows incoming calls on iOS and Android. Rules are Single numbers, P
 
 A release build asks the platform for nothing it does not use: the Android permission set is enforced at build time (`verifyReleasePermissions`, [ADR 0006](./docs/adr/0006-a-release-build-requests-only-what-blocking-needs.md)) and is just `VIBRATE`; the app reads no contacts ([ADR 0007](./docs/adr/0007-the-app-does-not-read-contacts.md)), has no Internet permission, no account, no analytics and no server. The app shows the list the platform itself reports under Settings › Privacy.
 
-The vocabulary is in [CONTEXT.md](./CONTEXT.md). The decisions behind the design are in [docs/adr](./docs/adr).
+The vocabulary is in [CONTEXT.md](./CONTEXT.md). The decisions behind the design are in [docs/adr](./docs/adr). How the parts fit together — components, and the data flows for a Registration, an incoming call, a Number check and a Backup — is in [docs/architecture.md](./docs/architecture.md).
 
 ## Layout
 
