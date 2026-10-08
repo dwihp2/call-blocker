@@ -1,5 +1,7 @@
 # Call Blocker
 
+[![CI](https://github.com/dwihp2/call-blocker/actions/workflows/ci.yml/badge.svg)](https://github.com/dwihp2/call-blocker/actions/workflows/ci.yml)
+
 Blocks and allows incoming calls on iOS and Android. Rules are Single numbers, Prefixes or Intervals; an Allow list overrides Block rules. A Rule can be turned off without deleting it.
 
 A release build asks the platform for nothing it does not use: the Android permission set is enforced at build time (`verifyReleasePermissions`, [ADR 0006](./docs/adr/0006-a-release-build-requests-only-what-blocking-needs.md)) and is just `VIBRATE`; the app reads no contacts ([ADR 0007](./docs/adr/0007-the-app-does-not-read-contacts.md)), has no Internet permission, no account, no analytics and no server. The app shows the list the platform itself reports under Settings › Privacy.
@@ -81,3 +83,7 @@ Work down this list; each step is something the app can tell you or something yo
 ### Changing the extension's Swift is a build trap
 
 The config plugin used to copy the extension's sources into the generated project, so `xcodebuild` compiled a copy that only `expo prebuild` refreshed — a deployed extension that silently differed from the repository. The plugin now links `modules/call-directory/extension/CallDirectoryExtension.swift` and `ios/RuleEngine.swift` directly. Keep it that way: if the extension ever stops matching the repo, every measurement about it becomes worthless.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

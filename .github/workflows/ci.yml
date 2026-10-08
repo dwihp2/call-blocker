@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: TypeScript (typecheck + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  swift-matching-contract:
+    name: Swift engine (matching contract)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run fixtures/matching.json through the Swift engine
+        run: |
+          swiftc -O modules/call-directory/ios/RuleEngine.swift \
+                 modules/call-directory/tests/run-fixtures.swift \
+                 -o "$RUNNER_TEMP/cd-fixtures"
+          "$RUNNER_TEMP/cd-fixtures" fixtures/matching.json
+
+  kotlin-matching-contract:
+    name: Kotlin engine (matching contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: 1
+        run: npx expo prebuild --platform android --no-install
+      - name: Run fixtures/matching.json through the Kotlin engine
+        run: npm run fixtures:jvm
